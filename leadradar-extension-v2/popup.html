@@ -1,0 +1,86 @@
+<!-- popup.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeadRadar Saver</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>LeadRadar Saver</h1>
+    <p class="sub">Auto extract → text fallback → manual fallback.</p>
+
+    <div id="status" class="status">Loading profile…</div>
+
+    <label for="fullName">Full Name</label>
+    <input id="fullName" type="text" />
+
+    <label for="headline">Headline</label>
+    <textarea id="headline"></textarea>
+
+    <label for="location">Location</label>
+    <input id="location" type="text" />
+
+    <label for="company">Company</label>
+    <input id="company" type="text" />
+
+    <label for="linkedinUrl">LinkedIn URL</label>
+    <input id="linkedinUrl" type="text" />
+
+    <label for="category">Category</label>
+    <select id="category">
+      <option value="Small Business">Small Business</option>
+      <option value="Contractor">Contractor</option>
+      <option value="Cafe / Restaurant">Cafe / Restaurant</option>
+    </select>
+
+    <label for="statusValue">Status</label>
+    <select id="statusValue">
+      <option value="new">New</option>
+      <option value="active">Active</option>
+      <option value="contacted">Contacted</option>
+      <option value="qualified">Qualified</option>
+      <option value="proposal_sent">Proposal Sent</option>
+      <option value="negotiation">Negotiation</option>
+      <option value="won">Won</option>
+      <option value="lost">Lost</option>
+    </select>
+
+    <label for="stage">Stage</label>
+    <select id="stage">
+      <option value="new">New</option>
+      <option value="contacted">Contacted</option>
+      <option value="qualified">Qualified</option>
+      <option value="proposal">Proposal</option>
+      <option value="negotiation">Negotiation</option>
+      <option value="won">Won</option>
+      <option value="lost">Lost</option>
+    </select>
+
+    <label for="followUpDate">Follow-up Date</label>
+    <input id="followUpDate" type="date" />
+
+    <label for="notes">Notes</label>
+    <textarea id="notes" placeholder="Optional notes"></textarea>
+
+    <div class="divider"></div>
+
+    <label for="manualProfileText">Fallback: Paste LinkedIn profile header text</label>
+    <textarea
+      id="manualProfileText"
+      placeholder="Paste the visible LinkedIn header text here if auto extraction misses fields"
+    ></textarea>
+
+    <div class="button-row">
+      <button id="refreshBtn" type="button">Refresh Profile</button>
+      <button id="parseManualBtn" type="button" class="secondary">Parse Manual Text</button>
+    </div>
+
+    <button id="saveBtn" type="button">Save to LeadRadar</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

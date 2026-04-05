@@ -1,0 +1,100 @@
+/* popup.css */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f7fb;
+  color: #111827;
+}
+
+.wrap {
+  width: 380px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.sub {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.status {
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  background: #e5e7eb;
+  color: #111827;
+  font-size: 13px;
+}
+
+.status.success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 10px 0 6px;
+}
+
+input,
+textarea,
+select,
+button {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+button {
+  margin-top: 12px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+.secondary {
+  background: #475569;
+}
+
+.secondary:hover {
+  background: #334155;
+}
+
+.divider {
+  height: 1px;
+  background: #dbe3ef;
+  margin: 14px 0 10px;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
