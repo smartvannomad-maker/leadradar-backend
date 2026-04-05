@@ -1,5 +1,3 @@
-// backend/routes/leads.routes.js
-
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db/knex.js";
@@ -121,8 +119,9 @@ router.post("/", async (req, res) => {
 
     const lead = {
       id: uuidv4(),
-      user_id: req.user.id,
+      created_by: req.user.id,
       workspace_id: req.user.workspaceId,
+      user_email: req.user.email || null,
       business_name: normalizeText(body.businessName) || "LinkedIn Lead",
       contact_name: normalizeText(body.contactName) || "",
       mobile: normalizeText(body.mobile) || "",
@@ -207,8 +206,9 @@ router.post("/import", async (req, res) => {
 
       const lead = {
         id: uuidv4(),
-        user_id: req.user.id,
+        created_by: req.user.id,
         workspace_id: req.user.workspaceId,
+        user_email: req.user.email || null,
         ...parsed,
         created_at: new Date(),
         updated_at: new Date(),
@@ -276,13 +276,13 @@ router.patch("/:id", async (req, res) => {
       linkedinHeadline: "linkedin_headline",
     };
 
-    for (const [key, value] of Object.entries(req.body)) {
+    for (const [key, value] of Object.entries(req.body || {})) {
       if (fieldMap[key]) {
         updates[fieldMap[key]] = value;
       }
     }
 
-    if (Array.isArray(req.body.notesHistory)) {
+    if (Array.isArray(req.body?.notesHistory)) {
       updates.notes_history = JSON.stringify(req.body.notesHistory);
     }
 

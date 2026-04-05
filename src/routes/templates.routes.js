@@ -1,111 +1,177 @@
 import express from "express";
-import db from "../db/index.js";
+import { requireAuth } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
+router.use(requireAuth);
+
+/**
+ * Temporary in-code template store
+ * --------------------------------
+ * Your previous route expected a message_templates table, but that table
+ * is not part of the new clean migration set, so DB queries against it
+ * will fail until you add that schema back. This replacement keeps the
+ * API working for now using in-memory defaults.
+ *
+ * IMPORTANT:
+ * - Changes made with PUT will only persist until the server restarts.
+ * - Later, we can move this into PostgreSQL with a proper migration.
+ */
+
+const templateStore = {
+  whatsapp: [
+    {
+      id: 1,
+      name: "Intro",
+      text: "Hi {{name}}, I came across your business and thought LeadRadar could help you organise and track outreach more effectively.",
+    },
+    {
+      id: 2,
+      name: "Follow Up",
+      text: "Hi {{name}}, just following up on my previous message. Let me know if you'd like a quick overview.",
+    },
+    {
+      id: 3,
+      name: "Quote Follow Up",
+      text: "Hi {{name}}, I wanted to check whether you had time to review the quote and whether you have any questions.",
+    },
+  ],
+  email: [
+    {
+      id: 1,
+      name: "Cold Outreach",
+      subject: "A simple way to manage your outreach",
+      body: `Hi {{name}},
+
+I hope you're well.
+
+I wanted to reach out because I believe LeadRadar could help your business manage leads, follow-ups, and outreach in a much more organised way.
+
+If you're open to it, I’d be happy to share a quick overview.
+
+Kind regards,
+{{senderName}}`,
+    },
+    {
+      id: 2,
+      name: "Follow Up",
+      subject: "Following up on my previous email",
+      body: `Hi {{name}},
+
+Just following up on my previous message.
+
+I’d be happy to show you how LeadRadar can help simplify your lead management and outreach process.
+
+Kind regards,
+{{senderName}}`,
+    },
+    {
+      id: 3,
+      name: "Quote Follow Up",
+      subject: "Checking in on the quote",
+      body: `Hi {{name}},
+
+I just wanted to follow up regarding the quote I sent.
+
+Please let me know if you have any questions or if you'd like to discuss the next steps.
+
+Kind regards,
+{{senderName}}`,
+    },
+  ],
+};
+
+function cloneTemplates() {
+  return {
+    whatsapp: templateStore.whatsapp.map((item) => ({ ...item })),
+    email: templateStore.email.map((item) => ({ ...item })),
+  };
+}
+
 router.get("/", async (req, res) => {
   try {
-    const result = await db.query(
-      `
-      SELECT id, channel, template_key, name, subject, body, text
-      FROM message_templates
-      ORDER BY channel, template_key::int
-      `
-    );
+    const templates = cloneTemplates();
 
-    const whatsapp = result.rows
-      .filter((row) => row.channel === "whatsapp")
-      .map((row) => ({
-        id: Number(row.template_key),
-        name: row.name,
-        text: row.text || "",
-      }));
-
-    const email = result.rows
-      .filter((row) => row.channel === "email")
-      .map((row) => ({
-        id: Number(row.template_key),
-        name: row.name,
-        subject: row.subject || "",
-        body: row.body || "",
-      }));
-
-    res.json({ whatsapp, email });
+    return res.json({
+      whatsapp: templates.whatsapp,
+      email: templates.email,
+    });
   } catch (error) {
     console.error("GET /api/templates failed:", error);
-    res.status(500).json({ message: "Could not load templates" });
+    return res.status(500).json({ message: "Could not load templates" });
   }
 });
 
 router.put("/whatsapp/:id", async (req, res) => {
-  const { id } = req.params;
-  const { name, text } = req.body;
-
   try {
-    const result = await db.query(
-      `
-      UPDATE message_templates
-      SET name = $1,
-          text = $2,
-          updated_at = NOW()
-      WHERE channel = 'whatsapp'
-        AND template_key = $3
-      RETURNING id, template_key, name, text
-      `,
-      [name, text, String(id)]
-    );
+    const id = Number(req.params.id);
+    const { name, text } = req.body || {};
 
-    if (!result.rows.length) {
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ message: "Invalid template id" });
+    }
+
+    const index = templateStore.whatsapp.findIndex((item) => item.id === id);
+
+    if (index === -1) {
       return res.status(404).json({ message: "Template not found" });
     }
 
-    const row = result.rows[0];
+    if (typeof name !== "string" || typeof text !== "string") {
+      return res.status(400).json({
+        message: "Both name and text are required",
+      });
+    }
 
-    res.json({
-      id: Number(row.template_key),
-      name: row.name,
-      text: row.text || "",
-    });
+    templateStore.whatsapp[index] = {
+      ...templateStore.whatsapp[index],
+      name: name.trim(),
+      text: text.trim(),
+    };
+
+    return res.json(templateStore.whatsapp[index]);
   } catch (error) {
     console.error("PUT /api/templates/whatsapp/:id failed:", error);
-    res.status(500).json({ message: "Could not save WhatsApp template" });
+    return res.status(500).json({ message: "Could not save WhatsApp template" });
   }
 });
 
 router.put("/email/:id", async (req, res) => {
-  const { id } = req.params;
-  const { name, subject, body } = req.body;
-
   try {
-    const result = await db.query(
-      `
-      UPDATE message_templates
-      SET name = $1,
-          subject = $2,
-          body = $3,
-          updated_at = NOW()
-      WHERE channel = 'email'
-        AND template_key = $4
-      RETURNING id, template_key, name, subject, body
-      `,
-      [name, subject, body, String(id)]
-    );
+    const id = Number(req.params.id);
+    const { name, subject, body } = req.body || {};
 
-    if (!result.rows.length) {
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ message: "Invalid template id" });
+    }
+
+    const index = templateStore.email.findIndex((item) => item.id === id);
+
+    if (index === -1) {
       return res.status(404).json({ message: "Template not found" });
     }
 
-    const row = result.rows[0];
+    if (
+      typeof name !== "string" ||
+      typeof subject !== "string" ||
+      typeof body !== "string"
+    ) {
+      return res.status(400).json({
+        message: "Name, subject, and body are required",
+      });
+    }
 
-    res.json({
-      id: Number(row.template_key),
-      name: row.name,
-      subject: row.subject || "",
-      body: row.body || "",
-    });
+    templateStore.email[index] = {
+      ...templateStore.email[index],
+      name: name.trim(),
+      subject: subject.trim(),
+      body: body.trim(),
+    };
+
+    return res.json(templateStore.email[index]);
   } catch (error) {
     console.error("PUT /api/templates/email/:id failed:", error);
-    res.status(500).json({ message: "Could not save Email template" });
+    return res.status(500).json({ message: "Could not save Email template" });
   }
 });
 
