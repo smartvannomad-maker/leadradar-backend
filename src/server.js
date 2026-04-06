@@ -12,6 +12,8 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "https://wondrous-pothos-1d6004.netlify.app",
+  "https://gentle-figolla-049e60.netlify.app",
   (process.env.FRONTEND_URL || "").trim(),
 ].filter(Boolean);
 
@@ -24,8 +26,16 @@ app.use(
 
       const cleanOrigin = String(origin).trim();
 
+      const isExactMatch = allowedOrigins.includes(cleanOrigin);
+
+      const isNetlifyPreview =
+        /^https:\/\/[a-z0-9-]+--wondrous-pothos-1d6004\.netlify\.app$/i.test(
+          cleanOrigin
+        );
+
       if (
-        allowedOrigins.includes(cleanOrigin) ||
+        isExactMatch ||
+        isNetlifyPreview ||
         cleanOrigin.startsWith("chrome-extension://") ||
         cleanOrigin.startsWith("edge-extension://")
       ) {
