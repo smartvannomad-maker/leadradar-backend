@@ -2,6 +2,7 @@ import express from "express";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db/knex.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
+import { scoreLead } from "../utils/leadScoring.js";
 
 const router = express.Router();
 
@@ -40,6 +41,13 @@ function mapLead(row) {
     linkedinHeadline: row.linkedin_headline,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ai_score: row.ai_score || 0,
+    ai_priority: row.ai_priority || "cold",
+    ai_reasons: safeJsonParse(row.ai_reasons, []),
+    deal_probability: row.deal_probability || 0,
+    estimated_value: row.estimated_value || 0,
+    next_best_action: row.next_best_action || "",
+    follow_up_urgency: row.follow_up_urgency || "low",
   };
 }
 
@@ -55,48 +63,77 @@ function parseImportRow(row = {}) {
     row.contactName || row["Contact Name"] || row.contact_name
   );
 
-  return {
-    business_name: businessName,
-    contact_name: contactName,
+  const baseLead = {
+    businessName,
+    contactName,
     mobile: normalizeText(row.mobile || row.Mobile),
     category: normalizeText(row.category || row.Category) || "Small Business",
     status: normalizeText(row.status || row.Status) || "new",
     stage: normalizeText(row.stage || row.Stage) || "new",
-    follow_up_date:
+    followUpDate:
       row.followUpDate || row["Follow Up Date"] || row.follow_up_date || null,
     notes: normalizeText(row.notes || row.Notes),
+    quoteAmount:
+      row.quoteAmount || row["Quote Amount"] || row.quote_amount || null,
+    quoteStatus:
+      normalizeText(row.quoteStatus || row["Quote Status"] || row.quote_status) ||
+      "not_sent",
+    linkedinRole: normalizeText(
+      row.linkedinRole || row["LinkedIn Role"] || row.linkedin_role
+    ),
+    linkedinLocation: normalizeText(
+      row.linkedinLocation || row["LinkedIn Location"] || row.linkedin_location
+    ),
+    linkedinKeywords: normalizeText(
+      row.linkedinKeywords || row["LinkedIn Keywords"] || row.linkedin_keywords
+    ),
+    linkedinCompany: normalizeText(
+      row.linkedinCompany || row["LinkedIn Company"] || row.linkedin_company
+    ),
+    linkedinProfileUrl: normalizeText(
+      row.linkedinProfileUrl || row["LinkedIn Profile URL"] || row.linkedin_profile_url
+    ),
+    linkedinHeadline: normalizeText(
+      row.linkedinHeadline || row["LinkedIn Headline"] || row.linkedin_headline
+    ),
+  };
+
+  const ai = scoreLead(baseLead);
+
+  return {
+    business_name: baseLead.businessName,
+    contact_name: baseLead.contactName,
+    mobile: baseLead.mobile,
+    category: baseLead.category,
+    status: baseLead.status,
+    stage: baseLead.stage,
+    follow_up_date: baseLead.followUpDate,
+    notes: baseLead.notes,
     notes_history: JSON.stringify(
-      normalizeText(row.notes || row.Notes)
+      baseLead.notes
         ? [
             {
-              text: normalizeText(row.notes || row.Notes),
+              text: baseLead.notes,
               createdAt: new Date().toISOString(),
             },
           ]
         : []
     ),
-    quote_amount: row.quoteAmount || row["Quote Amount"] || row.quote_amount || null,
-    quote_status:
-      normalizeText(row.quoteStatus || row["Quote Status"] || row.quote_status) ||
-      "not_sent",
-    linkedin_role: normalizeText(
-      row.linkedinRole || row["LinkedIn Role"] || row.linkedin_role
-    ),
-    linkedin_location: normalizeText(
-      row.linkedinLocation || row["LinkedIn Location"] || row.linkedin_location
-    ),
-    linkedin_keywords: normalizeText(
-      row.linkedinKeywords || row["LinkedIn Keywords"] || row.linkedin_keywords
-    ),
-    linkedin_company: normalizeText(
-      row.linkedinCompany || row["LinkedIn Company"] || row.linkedin_company
-    ),
-    linkedin_profile_url: normalizeText(
-      row.linkedinProfileUrl || row["LinkedIn Profile URL"] || row.linkedin_profile_url
-    ),
-    linkedin_headline: normalizeText(
-      row.linkedinHeadline || row["LinkedIn Headline"] || row.linkedin_headline
-    ),
+    quote_amount: baseLead.quoteAmount,
+    quote_status: baseLead.quoteStatus,
+    linkedin_role: baseLead.linkedinRole,
+    linkedin_location: baseLead.linkedinLocation,
+    linkedin_keywords: baseLead.linkedinKeywords,
+    linkedin_company: baseLead.linkedinCompany,
+    linkedin_profile_url: baseLead.linkedinProfileUrl,
+    linkedin_headline: baseLead.linkedinHeadline,
+    ai_score: ai.ai_score,
+    ai_priority: ai.ai_priority,
+    ai_reasons: JSON.stringify(ai.ai_reasons),
+    deal_probability: ai.deal_probability,
+    estimated_value: ai.estimated_value,
+    next_best_action: ai.next_best_action,
+    follow_up_urgency: ai.follow_up_urgency,
   };
 }
 
@@ -104,7 +141,10 @@ router.get("/", async (req, res) => {
   try {
     const leads = await db("leads")
       .where({ workspace_id: req.user.workspaceId })
-      .orderBy("created_at", "desc");
+      .orderBy([
+        { column: "ai_score", order: "desc" },
+        { column: "created_at", order: "desc" },
+      ]);
 
     return res.json(leads.map(mapLead));
   } catch (error) {
@@ -116,6 +156,7 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const body = req.body || {};
+    const ai = scoreLead(body);
 
     const lead = {
       id: uuidv4(),
@@ -141,6 +182,13 @@ router.post("/", async (req, res) => {
       linkedin_company: normalizeText(body.linkedinCompany) || "",
       linkedin_profile_url: normalizeText(body.linkedinProfileUrl) || "",
       linkedin_headline: normalizeText(body.linkedinHeadline) || "",
+      ai_score: ai.ai_score,
+      ai_priority: ai.ai_priority,
+      ai_reasons: JSON.stringify(ai.ai_reasons),
+      deal_probability: ai.deal_probability,
+      estimated_value: ai.estimated_value,
+      next_best_action: ai.next_best_action,
+      follow_up_urgency: ai.follow_up_urgency,
       created_at: new Date(),
       updated_at: new Date(),
     };
@@ -222,7 +270,10 @@ router.post("/import", async (req, res) => {
       ? await db("leads")
           .whereIn("id", created)
           .andWhere({ workspace_id: req.user.workspaceId })
-          .orderBy("created_at", "desc")
+          .orderBy([
+            { column: "ai_score", order: "desc" },
+            { column: "created_at", order: "desc" },
+          ])
       : [];
 
     return res.status(201).json({
@@ -285,6 +336,38 @@ router.patch("/:id", async (req, res) => {
     if (Array.isArray(req.body?.notesHistory)) {
       updates.notes_history = JSON.stringify(req.body.notesHistory);
     }
+
+    const mergedForScoring = {
+      businessName: req.body?.businessName ?? existingLead.business_name ?? "",
+      contactName: req.body?.contactName ?? existingLead.contact_name ?? "",
+      mobile: req.body?.mobile ?? existingLead.mobile ?? "",
+      category: req.body?.category ?? existingLead.category ?? "",
+      status: req.body?.status ?? existingLead.status ?? "",
+      stage: req.body?.stage ?? existingLead.stage ?? "",
+      followUpDate: req.body?.followUpDate ?? existingLead.follow_up_date ?? null,
+      notes: req.body?.notes ?? existingLead.notes ?? "",
+      notesHistory: Array.isArray(req.body?.notesHistory)
+        ? req.body.notesHistory
+        : safeJsonParse(existingLead.notes_history, []),
+      quoteAmount: req.body?.quoteAmount ?? existingLead.quote_amount ?? null,
+      quoteStatus: req.body?.quoteStatus ?? existingLead.quote_status ?? "",
+      linkedinRole: req.body?.linkedinRole ?? existingLead.linkedin_role ?? "",
+      linkedinLocation: req.body?.linkedinLocation ?? existingLead.linkedin_location ?? "",
+      linkedinKeywords: req.body?.linkedinKeywords ?? existingLead.linkedin_keywords ?? "",
+      linkedinCompany: req.body?.linkedinCompany ?? existingLead.linkedin_company ?? "",
+      linkedinProfileUrl: req.body?.linkedinProfileUrl ?? existingLead.linkedin_profile_url ?? "",
+      linkedinHeadline: req.body?.linkedinHeadline ?? existingLead.linkedin_headline ?? "",
+    };
+
+    const ai = scoreLead(mergedForScoring);
+
+    updates.ai_score = ai.ai_score;
+    updates.ai_priority = ai.ai_priority;
+    updates.ai_reasons = JSON.stringify(ai.ai_reasons);
+    updates.deal_probability = ai.deal_probability;
+    updates.estimated_value = ai.estimated_value;
+    updates.next_best_action = ai.next_best_action;
+    updates.follow_up_urgency = ai.follow_up_urgency;
 
     await db("leads")
       .where({
@@ -349,6 +432,28 @@ router.post("/:id/notes", async (req, res) => {
       },
     ];
 
+    const mergedForScoring = {
+      businessName: lead.business_name,
+      contactName: lead.contact_name,
+      mobile: lead.mobile,
+      category: lead.category,
+      status: lead.status,
+      stage: lead.stage,
+      followUpDate: lead.follow_up_date,
+      notes: lead.notes,
+      notesHistory: nextHistory,
+      quoteAmount: lead.quote_amount,
+      quoteStatus: lead.quote_status,
+      linkedinRole: lead.linkedin_role,
+      linkedinLocation: lead.linkedin_location,
+      linkedinKeywords: lead.linkedin_keywords,
+      linkedinCompany: lead.linkedin_company,
+      linkedinProfileUrl: lead.linkedin_profile_url,
+      linkedinHeadline: lead.linkedin_headline,
+    };
+
+    const ai = scoreLead(mergedForScoring);
+
     await db("leads")
       .where({
         id: req.params.id,
@@ -356,6 +461,13 @@ router.post("/:id/notes", async (req, res) => {
       })
       .update({
         notes_history: JSON.stringify(nextHistory),
+        ai_score: ai.ai_score,
+        ai_priority: ai.ai_priority,
+        ai_reasons: JSON.stringify(ai.ai_reasons),
+        deal_probability: ai.deal_probability,
+        estimated_value: ai.estimated_value,
+        next_best_action: ai.next_best_action,
+        follow_up_urgency: ai.follow_up_urgency,
         updated_at: new Date(),
       });
 

@@ -1,286 +1,207 @@
 import express from "express";
 import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
-import db from "../db/knex.js";
-import {
-  signAccessToken,
-  signRefreshToken,
-  verifyRefreshToken,
-} from "../utils/jwt.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
+import jwt from "jsonwebtoken";
+import knex from "../db/knex.js";
+import { getTrialEndsAt, resolveWorkspaceAccess } from "../utils/billing.js";
 
 const router = express.Router();
 
-async function getUserWithWorkspaceRole(userId) {
-  const user = await db("users as u")
-    .leftJoin("workspace_members as wm", function () {
-      this.on("wm.user_id", "=", "u.id").andOn(
-        "wm.workspace_id",
-        "=",
-        "u.workspace_id"
-      );
-    })
-    .select(
-      "u.id",
-      "u.email",
-      "u.role",
-      "u.workspace_id",
-      "u.full_name",
-      "wm.role as workspace_role"
-    )
-    .where("u.id", userId)
-    .first();
-
-  return user;
+function signAccessToken(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "15m" });
 }
 
-router.post("/register", async (req, res) => {
+function signRefreshToken(payload) {
+  return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: "30d",
+  });
+}
+
+function makeDefaultNameFromEmail(email = "") {
+  const localPart = String(email).split("@")[0] || "User";
+  const cleaned = localPart
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return "New User";
+
+  return cleaned
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+async function handleSignup(req, res, next) {
   try {
-    const email = (req.body?.email || "").trim().toLowerCase();
-    const password = req.body?.password || "";
-    const fullName = (req.body?.fullName || "").trim();
+    const { fullName, email, password, workspaceName } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
-    }
-
-    if (password.length < 6) {
       return res.status(400).json({
-        message: "Password must be at least 6 characters",
+        message: "Email and password are required.",
       });
     }
 
-    const existingUser = await db("users").where({ email }).first();
+    const cleanEmail = email.trim().toLowerCase();
+    const resolvedFullName = (fullName || "").trim() || makeDefaultNameFromEmail(cleanEmail);
+    const resolvedWorkspaceName =
+      (workspaceName || "").trim() || `${resolvedFullName}'s Workspace`;
+
+    const existingUser = await knex("users")
+      .whereRaw("LOWER(email) = LOWER(?)", [cleanEmail])
+      .first();
 
     if (existingUser) {
-      return res.status(409).json({ message: "Email already registered" });
+      return res.status(409).json({
+        message: "An account with this email already exists.",
+      });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const workspaceId = uuidv4();
-    const userId = uuidv4();
-    const membershipId = uuidv4();
+    const result = await knex.transaction(async (trx) => {
+      const insertedUsers = await trx("users")
+        .insert({
+          full_name: resolvedFullName,
+          email: cleanEmail,
+          password_hash: passwordHash,
+        })
+        .returning("*");
 
-    await db.transaction(async (trx) => {
-      await trx("workspaces").insert({
-        id: workspaceId,
-        name: fullName || email.split("@")[0] || "My Workspace",
-        slug: null,
-        created_at: new Date(),
-        updated_at: new Date(),
-      });
+      const user = insertedUsers[0];
 
-      await trx("users").insert({
-        id: userId,
-        workspace_id: workspaceId,
-        email,
-        password_hash: passwordHash,
-        full_name: fullName || null,
-        role: "user",
-        created_at: new Date(),
-        updated_at: new Date(),
-      });
+      const insertedWorkspaces = await trx("workspaces")
+        .insert({
+          name: resolvedWorkspaceName,
+          owner_user_id: user.id,
+          plan: "starter",
+          subscription_status: "trialing",
+          trial_ends_at: getTrialEndsAt(),
+        })
+        .returning("*");
+
+      const workspace = insertedWorkspaces[0];
 
       await trx("workspace_members").insert({
-        id: membershipId,
-        workspace_id: workspaceId,
-        user_id: userId,
+        workspace_id: workspace.id,
+        user_id: user.id,
         role: "owner",
-        created_at: new Date(),
-        updated_at: new Date(),
       });
+
+      return { user, workspace };
     });
 
-    const safeUser = {
-      id: userId,
-      email,
-      role: "user",
-      workspaceId,
-      workspaceRole: "owner",
-      fullName: fullName || null,
+    const workspaceAccess = resolveWorkspaceAccess(result.workspace);
+
+    const tokenPayload = {
+      userId: result.user.id,
+      email: result.user.email,
+      workspaceId: result.workspace.id,
     };
 
-    const accessToken = signAccessToken(safeUser);
-    const refreshToken = signRefreshToken(safeUser);
-
-    await db("refresh_tokens").insert({
-      id: uuidv4(),
-      user_id: userId,
-      token: refreshToken,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      revoked: false,
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
+    const accessToken = signAccessToken(tokenPayload);
+    const refreshToken = signRefreshToken(tokenPayload);
 
     return res.status(201).json({
-      user: safeUser,
+      user: {
+        id: result.user.id,
+        fullName: result.user.full_name,
+        email: result.user.email,
+      },
+      workspace: {
+        id: result.workspace.id,
+        name: result.workspace.name,
+        plan: workspaceAccess.plan,
+        subscriptionStatus: workspaceAccess.subscriptionStatus,
+        trialEndsAt: workspaceAccess.trialEndsAt,
+        trialDaysLeft: workspaceAccess.trialDaysLeft,
+        isTrialing: workspaceAccess.isTrialing,
+        isExpired: workspaceAccess.isExpired,
+        isPaid: workspaceAccess.isPaid,
+        hasFullTrialAccess: workspaceAccess.hasFullTrialAccess,
+      },
       accessToken,
       refreshToken,
     });
   } catch (error) {
-    console.error("POST /api/auth/register error:", error);
-    return res.status(500).json({ message: "Failed to register user" });
+    console.error("Signup error:", error);
+    next(error);
   }
-});
+}
 
-router.post("/login", async (req, res) => {
+router.post("/signup", handleSignup);
+router.post("/register", handleSignup);
+
+router.post("/login", async (req, res, next) => {
   try {
-    const email = (req.body?.email || "").trim().toLowerCase();
-    const password = req.body?.password || "";
+    const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
-    }
+    const cleanEmail = email.trim().toLowerCase();
 
-    const user = await db("users").where({ email }).first();
-
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-
-    const passwordValid = await bcrypt.compare(password, user.password_hash);
-
-    if (!passwordValid) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
-
-    const memberRow = await db("workspace_members")
-      .where({
-        user_id: user.id,
-        workspace_id: user.workspace_id,
-      })
+    const user = await knex("users")
+      .whereRaw("LOWER(email) = LOWER(?)", [cleanEmail])
       .first();
 
-    const safeUser = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      workspaceId: user.workspace_id,
-      workspaceRole: memberRow?.role || "member",
-      fullName: user.full_name || null,
-    };
-
-    const accessToken = signAccessToken(safeUser);
-    const refreshToken = signRefreshToken(safeUser);
-
-    await db("refresh_tokens").insert({
-      id: uuidv4(),
-      user_id: user.id,
-      token: refreshToken,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      revoked: false,
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
-
-    return res.json({
-      user: safeUser,
-      accessToken,
-      refreshToken,
-    });
-  } catch (error) {
-    console.error("POST /api/auth/login error:", error);
-    return res.status(500).json({ message: "Failed to login" });
-  }
-});
-
-router.post("/refresh", async (req, res) => {
-  try {
-    const refreshToken = req.body?.refreshToken || "";
-
-    if (!refreshToken) {
-      return res.status(400).json({ message: "Refresh token is required" });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials." });
     }
 
-    let payload;
-    try {
-      payload = verifyRefreshToken(refreshToken);
-    } catch {
-      return res.status(401).json({ message: "Invalid refresh token" });
+    const passwordOk = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordOk) {
+      return res.status(401).json({ message: "Invalid credentials." });
     }
 
-    const savedToken = await db("refresh_tokens")
-      .where({
-        token: refreshToken,
-        user_id: payload.sub,
-        revoked: false,
-      })
+    const workspaceMember = await knex("workspace_members")
+      .where({ user_id: user.id })
       .first();
 
-    if (!savedToken) {
-      return res.status(401).json({ message: "Refresh token not recognized" });
+    if (!workspaceMember) {
+      return res.status(404).json({ message: "Workspace membership not found." });
     }
 
-    if (savedToken.expires_at && new Date(savedToken.expires_at) < new Date()) {
-      await db("refresh_tokens").where({ id: savedToken.id }).del();
-      return res.status(401).json({ message: "Refresh token expired" });
+    const workspace = await knex("workspaces")
+      .where({ id: workspaceMember.workspace_id })
+      .first();
+
+    if (!workspace) {
+      return res.status(404).json({ message: "Workspace not found." });
     }
 
-    const user = await getUserWithWorkspaceRole(payload.sub);
+    const workspaceAccess = resolveWorkspaceAccess(workspace);
 
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
-    }
-
-    const safeUser = {
-      id: user.id,
+    const tokenPayload = {
+      userId: user.id,
       email: user.email,
-      role: user.role,
-      workspaceId: user.workspace_id,
-      workspaceRole: user.workspace_role || "member",
-      fullName: user.full_name || null,
+      workspaceId: workspace.id,
     };
 
-    const newAccessToken = signAccessToken(safeUser);
-
-    return res.json({
-      user: safeUser,
-      accessToken: newAccessToken,
-    });
-  } catch (error) {
-    console.error("POST /api/auth/refresh error:", error);
-    return res.status(500).json({ message: "Failed to refresh token" });
-  }
-});
-
-router.post("/logout", async (req, res) => {
-  try {
-    const refreshToken = req.body?.refreshToken || "";
-
-    if (refreshToken) {
-      await db("refresh_tokens").where({ token: refreshToken }).del();
-    }
-
-    return res.json({ success: true });
-  } catch (error) {
-    console.error("POST /api/auth/logout error:", error);
-    return res.status(500).json({ message: "Failed to logout" });
-  }
-});
-
-router.get("/me", requireAuth, async (req, res) => {
-  try {
-    const user = await getUserWithWorkspaceRole(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    const accessToken = signAccessToken(tokenPayload);
+    const refreshToken = signRefreshToken(tokenPayload);
 
     return res.json({
       user: {
         id: user.id,
+        fullName: user.full_name,
         email: user.email,
-        role: user.role,
-        workspaceId: user.workspace_id,
-        workspaceRole: user.workspace_role || "member",
-        fullName: user.full_name || null,
       },
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        plan: workspaceAccess.plan,
+        subscriptionStatus: workspaceAccess.subscriptionStatus,
+        trialEndsAt: workspaceAccess.trialEndsAt,
+        trialDaysLeft: workspaceAccess.trialDaysLeft,
+        isTrialing: workspaceAccess.isTrialing,
+        isExpired: workspaceAccess.isExpired,
+        isPaid: workspaceAccess.isPaid,
+        hasFullTrialAccess: workspaceAccess.hasFullTrialAccess,
+      },
+      accessToken,
+      refreshToken,
     });
   } catch (error) {
-    console.error("GET /api/auth/me error:", error);
-    return res.status(500).json({ message: "Failed to load user" });
+    console.error("Login error:", error);
+    next(error);
   }
 });
 
