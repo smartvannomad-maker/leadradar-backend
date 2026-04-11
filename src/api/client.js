@@ -1,45 +1,36 @@
-import {
-  clearAuthSession,
-  getAccessToken,
-  refreshRequest,
-  setAuthSession,
-} from "./auth";
+import { getAccessToken } from "./auth";
 
 const API_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+  process.env.REACT_APP_API_URL ||
+  "https://leadradar-backend-oziv.onrender.com/api";
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options, retries = 2) {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    if (retries <= 0) throw error;
+    await delay(2500);
+    return fetchWithRetry(url, options, retries - 1);
+  }
+}
 
 export async function apiFetch(path, options = {}) {
-  const runRequest = async (token) => {
-    const response = await fetch(`${API_URL}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(options.headers || {}),
-      },
-    });
-
-    return response;
-  };
-
-  let response = await runRequest(getAccessToken());
-
-  if (response.status === 401) {
-    try {
-      const refreshData = await refreshRequest();
-
-      setAuthSession({
-        accessToken: refreshData.accessToken,
-        refreshToken: localStorage.getItem("refreshToken"),
-        user: refreshData.user,
-      });
-
-      response = await runRequest(refreshData.accessToken);
-    } catch (error) {
-      clearAuthSession();
-      throw error;
-    }
-  }
+  const response = await fetchWithRetry(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      ...(options.body instanceof FormData
+        ? {}
+        : { "Content-Type": "application/json" }),
+      ...(getAccessToken()
+        ? { Authorization: `Bearer ${getAccessToken()}` }
+        : {}),
+      ...(options.headers || {}),
+    },
+  });
 
   const contentType = response.headers.get("content-type") || "";
   const data = contentType.includes("application/json")
@@ -52,7 +43,7 @@ export async function apiFetch(path, options = {}) {
       (typeof data === "string" && data) ||
       `Request failed with status ${response.status}`;
 
-    throw new Error(errorMessage);
+    throw new Error(`API ${path} failed: ${errorMessage}`);
   }
 
   return data;

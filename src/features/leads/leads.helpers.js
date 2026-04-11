@@ -44,7 +44,6 @@ export function filterAndSortLeads(leads = [], filters = {}) {
   } = filters;
 
   let result = [...leads];
-
   const search = normalizeText(searchTerm);
 
   if (search) {
@@ -65,6 +64,7 @@ export function filterAndSortLeads(leads = [], filters = {}) {
         lead.status,
         lead.stage,
         lead.quoteStatus,
+        lead.next_best_action,
       ]
         .filter(Boolean)
         .join(" ")
@@ -115,6 +115,17 @@ export function filterAndSortLeads(leads = [], filters = {}) {
       const aDate = parseDate(a.followUpDate)?.getTime() ?? 0;
       const bDate = parseDate(b.followUpDate)?.getTime() ?? 0;
       return bDate - aDate;
+    }
+
+    if (sortBy === "ai-best") {
+      const scoreDiff = (b.ai_score || 0) - (a.ai_score || 0);
+      if (scoreDiff !== 0) return scoreDiff;
+
+      const probabilityDiff =
+        (b.deal_probability || 0) - (a.deal_probability || 0);
+      if (probabilityDiff !== 0) return probabilityDiff;
+
+      return (b.estimated_value || 0) - (a.estimated_value || 0);
     }
 
     return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
@@ -174,7 +185,7 @@ export function getTodayFollowUps(leads = []) {
 
 export function buildPipelineBuckets(leads = []) {
   const buckets = {
-    new: [],
+    prospect: [],
     contacted: [],
     qualified: [],
     proposal: [],
@@ -184,7 +195,7 @@ export function buildPipelineBuckets(leads = []) {
   };
 
   leads.forEach((lead) => {
-    const stage = normalizeText(lead.stage || "new");
+    const stage = normalizeText(lead.stage || "prospect");
     if (buckets[stage]) {
       buckets[stage].push(lead);
     } else {

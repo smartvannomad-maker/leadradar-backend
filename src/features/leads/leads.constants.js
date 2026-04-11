@@ -1,50 +1,77 @@
-export const stages = ["Prospect", "Contacted", "Quoted", "Negotiation", "Won"];
-
-export const statusOptions = ["New", "Contacted", "Interested", "Closed"];
-
 export const categoryOptions = [
-  "Cafe / Restaurant",
-  "Contractor",
   "Small Business",
+  "Cafe / Restaurant",
+  "Retail",
+  "E-commerce",
+  "Logistics",
+  "Manufacturing",
+  "Professional Services",
+  "Construction",
+  "Real Estate",
+  "Education",
+  "Healthcare",
+  "Other",
+];
+
+export const statusOptions = [
+  "New",
+  "Contacted",
+  "Qualified",
+  "Proposal Sent",
+  "Negotiation",
+  "Won",
+  "Lost",
+];
+
+export const stages = [
+  "Prospect",
+  "Contacted",
+  "Qualified",
+  "Proposal",
+  "Negotiation",
+  "Won",
 ];
 
 export const quoteStatuses = [
   "Not Sent",
   "Draft",
   "Sent",
-  "Approved",
-  "Declined",
+  "Accepted",
+  "Rejected",
 ];
 
 export const templates = {
-  contractor:
-    "Hi, I came across your business and noticed you could get more enquiries with a simple website and WhatsApp contact button. I build these for service businesses. Would you like me to create one for your business?",
-  cafe:
-    "Hi, I came across your café and noticed you could get more orders and bookings with a simple website and WhatsApp button. I can create one tailored for your café if you're interested.",
-  smallBusiness:
-    "Hi, I came across your business and noticed your online presence could be improved. I build simple websites with WhatsApp contact buttons for small businesses. Would you like me to create one for your business?",
-  followUp:
-    "Hi, just following up on my previous message. I can create a simple website with WhatsApp contact for your business. Let me know if you'd like me to show you an example.",
+  contractor: `Hi {name},
 
-  linkedinConnect:
-    "Hi {name}, I came across your profile and wanted to connect. Your background in {role} stood out to me.",
-  linkedinOpportunity:
-    "Hi {name}, I’m reaching out because your experience in {role} looks relevant to an opportunity I’m working on. Would you be open to a quick chat?",
-  linkedinFollowUp:
-    "Hi {name}, just following up on my previous message. I think your background could be a strong fit. Happy to share more details if you're open to it.",
-  linkedinCandidatePitch:
-    "Hi {name}, I’m currently sourcing talent and your profile caught my attention. Your experience at {company} and background in {role} look very relevant. Would you be open to hearing about a possible opportunity?",
+I hope you're well. I wanted to introduce myself and share how we can help streamline lead tracking, follow-ups, and sales workflow.
+
+Would you be open to a quick chat this week?`,
+
+  followUp: `Hi {name},
+
+Just following up on my previous message.
+
+I’d love to explore whether this could be a good fit for your business. Let me know if you'd like a quick overview.`,
+
+  linkedinConnect: `Hi {name}, I came across your profile and wanted to connect regarding {role} opportunities at {company}.`,
+
+  linkedinOpportunity: `Hi {name}, I’m reaching out regarding a potential {role} opportunity connected to {company}. I’d love to share more if you're open to a quick conversation.`,
+
+  linkedinFollowUp: `Hi {name}, just following up on my previous message regarding the {role} opportunity with {company}. Let me know if you'd be open to chat.`,
+
+  linkedinCandidatePitch: `Hi {name}, your background stood out to me and I think you could be a strong fit for a {role} opportunity with {company}. Open to connecting?`,
 };
 
 export const initialLeadForm = {
   businessName: "",
   contactName: "",
   mobile: "",
-  category: "Cafe / Restaurant",
+  category: "Small Business",
   status: "New",
   stage: "Prospect",
   followUpDate: "",
   notes: "",
+  notesHistory: [],
   quoteAmount: "",
   quoteStatus: "Not Sent",
   linkedinRole: "",
@@ -56,9 +83,9 @@ export const initialLeadForm = {
 };
 
 export const initialFilters = {
-  searchTerm: "",
-  categoryFilter: "All",
-  statusFilter: "All",
-  stageFilter: "All",
+  search: "",
+  status: "All",
+  stage: "All",
+  category: "All",
   sortBy: "newest",
 };

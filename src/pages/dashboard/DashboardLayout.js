@@ -6,6 +6,7 @@ import DashboardHeader from "../../components/dashboard/DashboardHeader";
 import DashboardSidebar from "../../components/dashboard/DashboardSidebar";
 import ConfirmModal from "../../components/dashboard/ConfirmModal";
 import ToastContainer from "../../components/dashboard/ToastContainer";
+import TrialBanner from "../../components/TrialBanner";
 
 import { useToast } from "../../hooks/useToast";
 import { useAuth } from "../../hooks/useAuth";
@@ -14,6 +15,7 @@ import { DashboardContext } from "../../context/DashboardContext";
 import {
   initialFilters,
   initialLeadForm,
+  templates,
 } from "../../features/leads/leads.constants";
 import {
   filterAndSortLeads,
@@ -30,10 +32,13 @@ import {
   removeLead,
   updateLeadField,
 } from "../../features/leads/leads.service";
-import { clearAuthSession } from "../../api/auth";
+import {
+  buildLinkedInNotes,
+  buildLinkedInSearchQuery,
+} from "../../features/linkedin/linkedin.helpers";
 
 export default function DashboardLayout() {
-  const { user, accessToken, logout } = useAuth();
+  const { user, accessToken, logout, workspace } = useAuth();
 
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,32 +46,52 @@ export default function DashboardLayout() {
   const [form, setForm] = useState(initialLeadForm);
   const [filters, setFilters] = useState(initialFilters);
 
+  const [selectedTemplate, setSelectedTemplate] = useState("contractor");
+  const [copiedMessage, setCopiedMessage] = useState("");
+
   const navigate = useNavigate();
   const toast = useToast();
 
   const [deleteLeadId, setDeleteLeadId] = useState(null);
 
-  const refreshLeads = useCallback(async () => {
-    try {
-      setLoading(true);
-      const leadList = await fetchLeads();
-      setLeads(Array.isArray(leadList) ? leadList : []);
-    } catch (error) {
-      console.error("Error loading leads:", error);
-      toast.error(error.message || "Could not load leads.");
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-      if (
-        error.message?.toLowerCase().includes("refresh") ||
-        error.message?.toLowerCase().includes("unauthorized") ||
-        error.message?.toLowerCase().includes("token")
-      ) {
-        clearAuthSession();
-        navigate("/");
+  const refreshLeads = useCallback(async () => {
+    setLoading(true);
+
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const leadList = await fetchLeads();
+        setLeads(Array.isArray(leadList) ? leadList : []);
+        setLoading(false);
+        return;
+      } catch (error) {
+        console.warn(`Load attempt ${attempt} failed:`, error);
+
+        const message = String(error?.message || "").toLowerCase();
+
+        const isWakeDelay =
+          message.includes("failed to fetch") ||
+          message.includes("networkerror") ||
+          message.includes("load failed");
+
+        if (!isWakeDelay && attempt === maxAttempts) {
+          toast.error(error.message || "Could not load leads.");
+        }
+
+        // IMPORTANT:
+        // Do not auto-logout here while debugging.
+        // Unauthorized lead loading should not wipe the whole session immediately.
+        if (attempt < maxAttempts) {
+          await sleep(2500);
+        }
       }
-    } finally {
-      setLoading(false);
     }
-  }, [toast, navigate]);
+
+    setLoading(false);
+  }, [toast]);
 
   useEffect(() => {
     if (!user || !accessToken) {
@@ -128,9 +153,7 @@ export default function DashboardLayout() {
       : [];
 
     if (TRACKED_ACTIVITY_FIELDS.has(field)) {
-      nextActivityHistory.push(
-        createFieldUpdateActivity(field, oldValue, value)
-      );
+      nextActivityHistory.push(createFieldUpdateActivity(field, oldValue, value));
     }
 
     const optimisticLead = {
@@ -175,6 +198,68 @@ export default function DashboardLayout() {
     }
   };
 
+  const handleCopyTemplate = async () => {
+    try {
+      const templateText = templates[selectedTemplate] || "";
+      await navigator.clipboard.writeText(templateText);
+      setCopiedMessage("Template copied");
+      setTimeout(() => setCopiedMessage(""), 1500);
+    } catch (error) {
+      console.error("Copy failed:", error);
+      toast.error("Could not copy template.");
+    }
+  };
+
+  const linkedinSearchQuery = useMemo(
+    () => buildLinkedInSearchQuery(form),
+    [form]
+  );
+
+  const openLinkedInSearch = () => {
+    const query =
+      typeof linkedinSearchQuery === "string"
+        ? linkedinSearchQuery.trim()
+        : "";
+
+    if (!query) {
+      toast.error("Add at least a role, keyword, company, or location.");
+      return;
+    }
+
+    const linkedinUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
+      query
+    )}`;
+
+    window.open(linkedinUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const saveLinkedInLeadToForm = () => {
+    const hasRole =
+      typeof form.linkedinRole === "string" && form.linkedinRole.trim();
+    const hasProfileUrl =
+      typeof form.linkedinProfileUrl === "string" &&
+      form.linkedinProfileUrl.trim();
+
+    if (!hasRole && !hasProfileUrl) {
+      toast.error("Add at least a role or a LinkedIn profile URL.");
+      return;
+    }
+
+    const linkedInNotes = buildLinkedInNotes(form);
+
+    setForm((prev) => ({
+      ...prev,
+      businessName:
+        (typeof prev.linkedinCompany === "string" &&
+          prev.linkedinCompany.trim()) ||
+        prev.businessName,
+      category: "Small Business",
+      notes: linkedInNotes,
+    }));
+
+    toast.success("LinkedIn details saved into lead form.");
+  };
+
   const filteredLeads = useMemo(
     () => filterAndSortLeads(leads, filters),
     [leads, filters]
@@ -182,7 +267,6 @@ export default function DashboardLayout() {
 
   const stats = useMemo(() => getLeadStats(leads), [leads]);
   const todayFollowUps = useMemo(() => getTodayFollowUps(leads), [leads]);
-
   const pipelineLeads = useMemo(() => filteredLeads, [filteredLeads]);
 
   const hideSidebar =
@@ -192,6 +276,7 @@ export default function DashboardLayout() {
     <DashboardContext.Provider
       value={{
         user,
+        workspace,
         leads,
         filteredLeads,
         loading,
@@ -207,6 +292,13 @@ export default function DashboardLayout() {
         confirmDeleteLead,
         refreshLeads,
         setDeleteLeadId,
+        selectedTemplate,
+        setSelectedTemplate,
+        handleCopyTemplate,
+        copiedMessage,
+        linkedinSearchQuery,
+        openLinkedInSearch,
+        saveLinkedInLeadToForm,
       }}
     >
       <div style={styles.page}>
@@ -236,6 +328,7 @@ export default function DashboardLayout() {
 
             <main style={styles.content}>
               <DashboardHeader user={user} onLogout={handleLogout} />
+              <TrialBanner />
               <Outlet />
             </main>
           </div>

@@ -1,4 +1,3 @@
-// popup.js
 const statusEl = document.getElementById("status");
 const fullNameEl = document.getElementById("fullName");
 const headlineEl = document.getElementById("headline");
@@ -15,7 +14,7 @@ const refreshBtn = document.getElementById("refreshBtn");
 const parseManualBtn = document.getElementById("parseManualBtn");
 const saveBtn = document.getElementById("saveBtn");
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "https://leadradar-backend-oziv.onrender.com/api";
 const TEST_EMAIL = "smartvannomad@gmail.com";
 const TEST_PASSWORD = "123456";
 
@@ -49,7 +48,9 @@ function looksLikeLocation(text) {
 
   return (
     /,\s*[A-Za-z]/.test(text) ||
-    /\b(?:South Africa|Western Cape|Cape Town|Johannesburg|Gauteng|Durban|Pretoria|Port Elizabeth|Gqeberha|Eastern Cape|KwaZulu-Natal|United States|United Kingdom|Netherlands|Belgium|Virginia|London|Remote|Hybrid)\b/i.test(text)
+    /\b(?:South Africa|Western Cape|Cape Town|Johannesburg|Gauteng|Durban|Pretoria|Port Elizabeth|Gqeberha|Eastern Cape|KwaZulu-Natal|United States|United Kingdom|Netherlands|Belgium|Virginia|London|Remote|Hybrid)\b/i.test(
+      text
+    )
   );
 }
 
@@ -132,7 +133,9 @@ function parseProfileText(rawText) {
     company =
       lines.find((line) => {
         if (!line) return false;
-        if (line === fullName || line === headline || line === location) return false;
+        if (line === fullName || line === headline || line === location) {
+          return false;
+        }
         if (isBadLine(line)) return false;
         if (looksLikeLocation(line)) return false;
         if (line.length < 2 || line.length > 120) return false;
@@ -157,7 +160,9 @@ async function getActiveTab() {
 }
 
 function isLinkedInProfileUrl(url) {
-  return /^https:\/\/(?:[A-Za-z0-9-]+\.)?linkedin\.com\/(?:in|pub)\/[^/?#]+(?:\/.*)?/i.test(url || "");
+  return /^https:\/\/(?:[A-Za-z0-9-]+\.)?linkedin\.com\/(?:in|pub)\/[^/?#]+(?:\/.*)?/i.test(
+    url || ""
+  );
 }
 
 async function ensureContentScript(tabId) {
@@ -166,7 +171,7 @@ async function ensureContentScript(tabId) {
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ["content.js"]
+      files: ["content.js"],
     });
   } catch (error) {
     console.warn("scripting fallback failed:", error);
@@ -178,13 +183,13 @@ async function requestProfile(tabId) {
 
   try {
     response = await chrome.tabs.sendMessage(tabId, {
-      type: "LEADRADAR_GET_PROFILE"
+      type: "LEADRADAR_GET_PROFILE",
     });
   } catch (error) {
     console.warn("sendMessage failed, injecting content script fallback:", error);
     await ensureContentScript(tabId);
     response = await chrome.tabs.sendMessage(tabId, {
-      type: "LEADRADAR_GET_PROFILE"
+      type: "LEADRADAR_GET_PROFILE",
     });
   }
 
@@ -192,7 +197,7 @@ async function requestProfile(tabId) {
     console.warn("No response from content script, injecting fallback content script.");
     await ensureContentScript(tabId);
     response = await chrome.tabs.sendMessage(tabId, {
-      type: "LEADRADAR_GET_PROFILE"
+      type: "LEADRADAR_GET_PROFILE",
     });
   }
 
@@ -206,7 +211,8 @@ function applyProfile(profile, fallbackUrl = "") {
   companyEl.value = profile.company || "";
   linkedinUrlEl.value = profile.url || fallbackUrl || "";
   followUpDateEl.value = profile.followUpDate || "";
-  manualProfileTextEl.value = profile.rawProfileText || manualProfileTextEl.value || "";
+  manualProfileTextEl.value =
+    profile.rawProfileText || manualProfileTextEl.value || "";
 }
 
 function applyParsedFields(parsed) {
@@ -279,12 +285,12 @@ async function signInToBackend() {
   const response = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       email: TEST_EMAIL,
-      password: TEST_PASSWORD
-    })
+      password: TEST_PASSWORD,
+    }),
   });
 
   const rawText = await response.text();
@@ -297,7 +303,12 @@ async function signInToBackend() {
   }
 
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || data?.rawText || `Login failed (${response.status})`);
+    throw new Error(
+      data?.message ||
+        data?.error ||
+        data?.rawText ||
+        `Login failed (${response.status})`
+    );
   }
 
   if (!data?.accessToken) {
@@ -337,7 +348,7 @@ function buildLeadPayload() {
     linkedinCompany: company,
     linkedinProfileUrl: linkedinUrl,
     linkedinHeadline: headline,
-    rawProfileText
+    rawProfileText,
   };
 }
 
@@ -348,9 +359,9 @@ async function saveLeadToApi(accessToken) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`
+      Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 
   const rawText = await response.text();
@@ -363,7 +374,12 @@ async function saveLeadToApi(accessToken) {
   }
 
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || data?.rawText || `Save failed (${response.status})`);
+    throw new Error(
+      data?.message ||
+        data?.error ||
+        data?.rawText ||
+        `Save failed (${response.status})`
+    );
   }
 
   return data;

@@ -7,20 +7,117 @@ import {
   Link2,
   FolderPlus,
   Network,
+  FileSpreadsheet,
+  Search,
+  CreditCard,
+  Crown,
 } from "lucide-react";
 import { styles } from "../../styles/dashboardStyles";
+import { getCurrentPlan } from "../../utils/currentPlan";
+import { PLAN_FEATURES } from "../../config/planFeatures";
 
 const sections = [
-  { id: "overview", label: "Overview", to: "/dashboard/overview", icon: LayoutDashboard },
-  { id: "create", label: "Add Lead", to: "/dashboard/create", icon: FolderPlus },
-  { id: "followups", label: "Follow-ups", to: "/dashboard/followups", icon: ListChecks },
-  { id: "pipeline", label: "Pipeline", to: "/dashboard/pipeline", icon: Network },
-  { id: "leads", label: "Leads", to: "/dashboard/leads", icon: BriefcaseBusiness },
-  { id: "linkedin", label: "LinkedIn", to: "/dashboard/linkedin", icon: Link2 },
-  { id: "team", label: "Team", to: "/dashboard/team", icon: Users },
+  {
+    id: "overview",
+    label: "Overview",
+    to: "/dashboard/overview",
+    icon: LayoutDashboard,
+  },
+  {
+    id: "create",
+    label: "Add Lead",
+    to: "/dashboard/create",
+    icon: FolderPlus,
+  },
+  {
+    id: "import",
+    label: "Import",
+    to: "/dashboard/import",
+    icon: FileSpreadsheet,
+  },
+  {
+    id: "search",
+    label: "Lead Search",
+    to: "/dashboard/search",
+    icon: Search,
+  },
+  {
+    id: "followups",
+    label: "Follow-ups",
+    to: "/dashboard/followups",
+    icon: ListChecks,
+  },
+  {
+    id: "pipeline",
+    label: "Pipeline",
+    to: "/dashboard/pipeline",
+    icon: Network,
+  },
+  {
+    id: "leads",
+    label: "Leads",
+    to: "/dashboard/leads",
+    icon: BriefcaseBusiness,
+  },
+  {
+    id: "linkedin",
+    label: "LinkedIn",
+    to: "/dashboard/linkedin",
+    icon: Link2,
+  },
+  {
+    id: "team",
+    label: "Team",
+    to: "/dashboard/team",
+    icon: Users,
+  },
+  {
+    id: "billing",
+    label: "Billing",
+    to: "/dashboard/billing",
+    icon: CreditCard,
+  },
 ];
 
+function getPlanAccent(plan) {
+  switch (plan) {
+    case "scale":
+      return {
+        bg: "linear-gradient(135deg, #ede9fe 0%, #eef2ff 100%)",
+        border: "#c4b5fd",
+        text: "#5b21b6",
+        badgeBg: "#ddd6fe",
+      };
+    case "pro":
+      return {
+        bg: "linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)",
+        border: "#93c5fd",
+        text: "#1d4ed8",
+        badgeBg: "#dbeafe",
+      };
+    case "growth":
+      return {
+        bg: "linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%)",
+        border: "#86efac",
+        text: "#166534",
+        badgeBg: "#dcfce7",
+      };
+    default:
+      return {
+        bg: "linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)",
+        border: "#e2e8f0",
+        text: "#334155",
+        badgeBg: "#f1f5f9",
+      };
+  }
+}
+
 export default function DashboardSidebar() {
+  const currentPlan = getCurrentPlan();
+  const currentPlanLabel =
+    PLAN_FEATURES[currentPlan]?.label || "Starter";
+  const planAccent = getPlanAccent(currentPlan);
+
   return (
     <div style={styles.sidebarCard}>
       <div
@@ -103,36 +200,94 @@ export default function DashboardSidebar() {
         })}
       </div>
 
-      <div
+      <NavLink
+        to="/dashboard/billing"
         style={{
           marginTop: 26,
           padding: 18,
           borderRadius: 22,
-          background: "linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)",
-          border: "1px solid #e2e8f0",
+          background: planAccent.bg,
+          border: `1px solid ${planAccent.border}`,
+          textDecoration: "none",
+          display: "block",
+          boxShadow: "0 12px 24px rgba(15,23,42,0.05)",
         }}
       >
         <div
           style={{
-            fontSize: 13,
-            fontWeight: 800,
-            color: "#0f172a",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 10,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              color: "#0f172a",
+            }}
+          >
+            Current Plan
+          </div>
+
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: planAccent.badgeBg,
+              color: planAccent.text,
+            }}
+          >
+            <Crown size={16} />
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: 18,
+            fontWeight: 900,
+            color: planAccent.text,
+            letterSpacing: "-0.03em",
             marginBottom: 8,
           }}
         >
-          Workspace mode
+          {currentPlanLabel}
         </div>
+
         <div
           style={{
             fontSize: 13,
-            lineHeight: 1.8,
-            color: "#64748b",
+            lineHeight: 1.7,
+            color: "#475569",
+            marginBottom: 12,
           }}
         >
-          Shared team workspace for compliant lead sourcing, follow-ups, pipeline
-          visibility, and CSV-based growth workflows.
+          Manage feature access, upgrade your workspace, and unlock more tools.
         </div>
-      </div>
+
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "9px 12px",
+            borderRadius: 999,
+            background: "#ffffff",
+            border: "1px solid rgba(148,163,184,0.18)",
+            color: "#0f172a",
+            fontSize: 12,
+            fontWeight: 800,
+          }}
+        >
+          Open Billing
+        </div>
+      </NavLink>
     </div>
   );
 }

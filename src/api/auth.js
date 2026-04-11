@@ -1,5 +1,6 @@
 const API_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+  process.env.REACT_APP_API_URL ||
+  "https://leadradar-backend-oziv.onrender.com/api";
 
 export function getAccessToken() {
   return localStorage.getItem("accessToken");
@@ -9,37 +10,79 @@ export function getRefreshToken() {
   return localStorage.getItem("refreshToken");
 }
 
-export function setAuthSession({ accessToken, refreshToken, user }) {
-  localStorage.setItem("accessToken", accessToken);
-  localStorage.setItem("refreshToken", refreshToken);
-  localStorage.setItem("authUser", JSON.stringify(user));
+export function getStoredUser() {
+  const raw = localStorage.getItem("authUser");
+  return raw ? JSON.parse(raw) : null;
+}
+
+export function getStoredWorkspace() {
+  const raw = localStorage.getItem("authWorkspace");
+  return raw ? JSON.parse(raw) : null;
+}
+
+export function setAuthSession(data) {
+  if (!data) return;
+
+  if (data.accessToken) {
+    localStorage.setItem("accessToken", data.accessToken);
+  }
+
+  if (data.refreshToken) {
+    localStorage.setItem("refreshToken", data.refreshToken);
+  }
+
+  if (data.user) {
+    localStorage.setItem("authUser", JSON.stringify(data.user));
+  }
+
+  if (data.workspace) {
+    localStorage.setItem("authWorkspace", JSON.stringify(data.workspace));
+  }
 }
 
 export function clearAuthSession() {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("authUser");
+  localStorage.removeItem("authWorkspace");
 }
 
-export async function registerRequest(email, password) {
-  const res = await fetch(`${API_URL}/auth/register`, {
+async function parseJsonResponse(res) {
+  const contentType = res.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
+  const data = isJson ? await res.json() : null;
+
+  if (!res.ok) {
+    const message =
+      data?.message ||
+      data?.error ||
+      `Request failed with status ${res.status}`;
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+export async function registerRequest(
+  fullName,
+  email,
+  password,
+  workspaceName = ""
+) {
+  const res = await fetch(`${API_URL}/auth/signup`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      email: email.trim().toLowerCase(),
+      fullName,
+      email,
       password,
+      workspaceName,
     }),
   });
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.message || "Registration failed");
-  }
-
-  return data;
+  return parseJsonResponse(res);
 }
 
 export async function loginRequest(email, password) {
@@ -49,52 +92,59 @@ export async function loginRequest(email, password) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      email: email.trim().toLowerCase(),
+      email,
       password,
     }),
   });
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.message || "Login failed");
-  }
-
-  return data;
+  return parseJsonResponse(res);
 }
 
 export async function refreshRequest() {
   const refreshToken = getRefreshToken();
+
+  if (!refreshToken) {
+    return null;
+  }
 
   const res = await fetch(`${API_URL}/auth/refresh`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ refreshToken }),
+    body: JSON.stringify({
+      refreshToken,
+    }),
   });
 
-  const data = await res.json();
-
-  if (!res.ok) {
-    throw new Error(data.message || "Refresh failed");
-  }
-
-  return data;
+  return parseJsonResponse(res);
 }
 
 export async function logoutRequest() {
   const refreshToken = getRefreshToken();
 
-  try {
-    await fetch(`${API_URL}/auth/logout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refreshToken }),
-    });
-  } finally {
-    clearAuthSession();
+  if (!refreshToken) {
+    return true;
   }
+
+  const res = await fetch(`${API_URL}/auth/logout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      refreshToken,
+    }),
+  });
+
+  if (!res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.message || "Logout failed.");
+    }
+    throw new Error("Logout failed.");
+  }
+
+  return true;
 }

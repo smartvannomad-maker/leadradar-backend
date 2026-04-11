@@ -9,7 +9,6 @@ export default function LinkedInPage() {
     form,
     setForm,
     linkedinSearchQuery,
-    openLinkedInSearch,
     saveLinkedInLeadToForm,
     selectedTemplate,
     setSelectedTemplate,
@@ -19,6 +18,28 @@ export default function LinkedInPage() {
 
   const isNarrowScreen =
     typeof window !== "undefined" && window.innerWidth < 1180;
+
+  const handleOpenLinkedInSearch = () => {
+    const query =
+      typeof linkedinSearchQuery === "string"
+        ? linkedinSearchQuery.trim()
+        : "";
+
+    console.log("LinkedIn button clicked");
+    console.log("linkedinSearchQuery:", query);
+
+    if (!query) {
+      alert("Add at least a role, keyword, company, or location");
+      return;
+    }
+
+    const linkedinUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
+      query
+    )}`;
+
+    console.log("Opening URL:", linkedinUrl);
+    window.open(linkedinUrl, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div
@@ -31,7 +52,7 @@ export default function LinkedInPage() {
         form={form}
         setForm={setForm}
         linkedinSearchQuery={linkedinSearchQuery}
-        onOpenSearch={openLinkedInSearch}
+        onOpenSearch={handleOpenLinkedInSearch}
         onSaveIntoLeadForm={saveLinkedInLeadToForm}
       />
 

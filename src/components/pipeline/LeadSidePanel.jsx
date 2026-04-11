@@ -1,75 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 
-function normalizePhone(phone = "") {
-  return String(phone).replace(/[^\d]/g, "");
-}
-
-function openSafe(url) {
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
-function fillVars(text = "", lead = {}) {
-  return String(text)
-    .replace(/{{name}}/g, lead.contactName || "")
-    .replace(/{{company}}/g, lead.businessName || "");
-}
-
-const DEFAULT_WHATSAPP_TEMPLATES = [
-  {
-    id: 1,
-    name: "Intro",
-    text: "Hi {{name}}, I came across {{company}} and would love to connect.",
-  },
-  {
-    id: 2,
-    name: "Follow Up",
-    text: "Hi {{name}}, just following up on my previous message regarding {{company}}.",
-  },
-  {
-    id: 3,
-    name: "Offer",
-    text: "Hi {{name}}, I help businesses like {{company}} generate more leads. Keen to chat?",
-  },
-];
-
-const DEFAULT_EMAIL_TEMPLATES = [
-  {
-    id: 1,
-    name: "Intro",
-    subject: "Hello from {{company}}",
-    body: "Hi {{name}},\n\nI came across {{company}} and wanted to reach out to introduce myself. Let's connect!",
-  },
-  {
-    id: 2,
-    name: "Follow Up",
-    subject: "Following up on our last conversation",
-    body: "Hi {{name}},\n\nJust following up on our previous discussion about {{company}}. Let me know if you're still interested!",
-  },
-  {
-    id: 3,
-    name: "Offer",
-    subject: "Help your business grow with {{company}}",
-    body: "Hi {{name}},\n\nI noticed {{company}} could benefit from our service. I'd love to discuss how we can help you generate more leads.",
-  },
-];
-
 const styles = {
   panel: {
     position: "sticky",
     top: "24px",
-    borderRadius: "24px",
-    background: "rgba(255,255,255,0.88)",
+    borderRadius: "26px",
+    background: "rgba(255,255,255,0.8)",
     backdropFilter: "blur(18px)",
     border: "1px solid rgba(148,163,184,0.18)",
     boxShadow: "0 18px 50px rgba(15,23,42,0.08)",
-    minHeight: "680px",
     overflow: "hidden",
+    minHeight: "700px",
   },
   empty: {
     padding: "28px",
     color: "#64748b",
-    fontSize: "14px",
+  },
+  inner: {
+    padding: "22px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "18px",
   },
   hero: {
     padding: "22px",
@@ -84,13 +35,26 @@ const styles = {
   },
   heroSubtitle: {
     margin: "8px 0 0 0",
-    opacity: 0.92,
+    opacity: 0.9,
     fontSize: "14px",
   },
-  body: {
-    padding: "22px",
-    display: "grid",
-    gap: "18px",
+  aiHeroRow: {
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+    marginTop: "14px",
+  },
+  aiPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "8px 12px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: 800,
+    background: "rgba(255,255,255,0.16)",
+    color: "#fff",
+    border: "1px solid rgba(255,255,255,0.18)",
   },
   section: {
     display: "grid",
@@ -98,34 +62,14 @@ const styles = {
   },
   sectionTitle: {
     margin: 0,
-    fontSize: "12px",
-    fontWeight: 800,
-    letterSpacing: "0.08em",
+    fontSize: "13px",
     textTransform: "uppercase",
+    letterSpacing: "0.08em",
     color: "#64748b",
-  },
-  actionGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "10px",
-  },
-  actionBtn: {
-    border: "1px solid rgba(148,163,184,0.2)",
-    background: "#fff",
-    color: "#0f172a",
-    borderRadius: "14px",
-    padding: "12px",
-    fontWeight: 700,
-    cursor: "pointer",
-    boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
+    fontWeight: 800,
   },
   fieldGrid: {
     display: "grid",
-    gap: "12px",
-  },
-  row2: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
     gap: "12px",
   },
   label: {
@@ -148,7 +92,7 @@ const styles = {
   },
   textarea: {
     width: "100%",
-    minHeight: "96px",
+    minHeight: "92px",
     resize: "vertical",
     padding: "12px 14px",
     borderRadius: "14px",
@@ -158,6 +102,26 @@ const styles = {
     fontSize: "14px",
     color: "#0f172a",
     boxSizing: "border-box",
+  },
+  row2: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "12px",
+  },
+  actionGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+  },
+  actionBtn: {
+    border: "1px solid rgba(148,163,184,0.2)",
+    background: "#fff",
+    color: "#0f172a",
+    borderRadius: "14px",
+    padding: "12px",
+    fontWeight: 700,
+    cursor: "pointer",
+    boxShadow: "0 8px 24px rgba(15,23,42,0.04)",
   },
   primaryBtn: {
     border: "none",
@@ -169,16 +133,11 @@ const styles = {
     cursor: "pointer",
     boxShadow: "0 12px 30px rgba(37,99,235,0.22)",
   },
-  secondaryBtn: {
-    border: "1px solid rgba(148,163,184,0.2)",
-    background: "#fff",
-    color: "#0f172a",
-    borderRadius: "14px",
-    padding: "12px 14px",
-    fontWeight: 700,
-    cursor: "pointer",
+  noteInputWrap: {
+    display: "grid",
+    gap: "10px",
   },
-  notesList: {
+  noteList: {
     display: "grid",
     gap: "10px",
   },
@@ -201,22 +160,141 @@ const styles = {
     color: "#0f172a",
     lineHeight: 1.5,
   },
-  previewBox: {
-    background: "#f8fafc",
-    border: "1px solid rgba(148,163,184,0.18)",
-    borderRadius: "14px",
-    padding: "12px",
-    fontSize: "13px",
-    color: "#475569",
-    lineHeight: 1.5,
-    whiteSpace: "pre-wrap",
-  },
-  actionsRow: {
+  metricsGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "10px",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "12px",
+  },
+  metricCard: {
+    background: "#fff",
+    border: "1px solid rgba(148,163,184,0.16)",
+    borderRadius: "16px",
+    padding: "14px",
+    boxShadow: "0 8px 20px rgba(15,23,42,0.03)",
+  },
+  metricLabel: {
+    margin: "0 0 6px 0",
+    fontSize: "11px",
+    color: "#64748b",
+    fontWeight: 800,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+  },
+  metricValue: {
+    margin: 0,
+    fontSize: "22px",
+    fontWeight: 900,
+    color: "#0f172a",
+  },
+  actionBox: {
+    background: "#eff6ff",
+    border: "1px solid rgba(37,99,235,0.14)",
+    borderRadius: "16px",
+    padding: "14px",
+  },
+  actionLabel: {
+    margin: "0 0 8px 0",
+    fontSize: "11px",
+    color: "#1d4ed8",
+    fontWeight: 800,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+  },
+  actionText: {
+    margin: 0,
+    fontSize: "13px",
+    color: "#1e3a8a",
+    lineHeight: 1.55,
+    fontWeight: 600,
+  },
+  reasonsWrap: {
+    display: "grid",
+    gap: "8px",
+  },
+  reasonItem: {
+    background: "#fff",
+    border: "1px solid rgba(148,163,184,0.16)",
+    borderRadius: "14px",
+    padding: "10px 12px",
+    fontSize: "13px",
+    color: "#334155",
+    lineHeight: 1.5,
+    boxShadow: "0 8px 20px rgba(15,23,42,0.03)",
   },
 };
+
+function normalizePhone(phone = "") {
+  return String(phone).replace(/[^\d]/g, "");
+}
+
+function openSafe(url) {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function formatCurrency(value) {
+  const amount = Number(value || 0);
+  if (!amount) return "R0";
+  return new Intl.NumberFormat("en-ZA", {
+    style: "currency",
+    currency: "ZAR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function getAiPriorityMeta(priority) {
+  if (priority === "hot") {
+    return {
+      label: "HOT 🔴",
+      color: "#991b1b",
+      background: "rgba(239,68,68,0.14)",
+    };
+  }
+
+  if (priority === "warm") {
+    return {
+      label: "WARM 🟠",
+      color: "#9a3412",
+      background: "rgba(249,115,22,0.16)",
+    };
+  }
+
+  return {
+    label: "COLD ⚪",
+    color: "#334155",
+    background: "rgba(148,163,184,0.16)",
+  };
+}
+
+function getUrgencyMeta(urgency) {
+  if (urgency === "high") {
+    return {
+      label: "HIGH FOLLOW-UP",
+      color: "#991b1b",
+      background: "rgba(239,68,68,0.14)",
+    };
+  }
+
+  if (urgency === "medium") {
+    return {
+      label: "MEDIUM FOLLOW-UP",
+      color: "#9a3412",
+      background: "rgba(249,115,22,0.16)",
+    };
+  }
+
+  return {
+    label: "LOW FOLLOW-UP",
+    color: "#334155",
+    background: "rgba(148,163,184,0.16)",
+  };
+}
+
+function formatNoteDate(value) {
+  if (!value) return "Unknown date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
 
 export default function LeadSidePanel({
   lead,
@@ -228,97 +306,17 @@ export default function LeadSidePanel({
   const [form, setForm] = useState(null);
   const [noteText, setNoteText] = useState("");
 
-  const [whatsappTemplates, setWhatsappTemplates] = useState(
-    DEFAULT_WHATSAPP_TEMPLATES
-  );
-  const [emailTemplates, setEmailTemplates] = useState(
-    DEFAULT_EMAIL_TEMPLATES
-  );
-
-  const [selectedWhatsappTemplateId, setSelectedWhatsappTemplateId] = useState(1);
-  const [selectedEmailTemplateId, setSelectedEmailTemplateId] = useState(1);
-
-  const [whatsappEditor, setWhatsappEditor] = useState("");
-  const [emailSubjectEditor, setEmailSubjectEditor] = useState("");
-  const [emailBodyEditor, setEmailBodyEditor] = useState("");
-
-  const [savingWhatsapp, setSavingWhatsapp] = useState(false);
-  const [savingEmail, setSavingEmail] = useState(false);
-
   useEffect(() => {
     setForm(lead ? { ...lead } : null);
     setNoteText("");
   }, [lead]);
 
-  useEffect(() => {
-    let ignore = false;
-
-    async function loadTemplates() {
-      try {
-        const res = await fetch("/api/templates");
-        if (!res.ok) throw new Error("Failed to load templates");
-        const data = await res.json();
-
-        if (ignore) return;
-
-        const wa =
-          Array.isArray(data.whatsapp) && data.whatsapp.length
-            ? data.whatsapp
-            : DEFAULT_WHATSAPP_TEMPLATES;
-
-        const em =
-          Array.isArray(data.email) && data.email.length
-            ? data.email
-            : DEFAULT_EMAIL_TEMPLATES;
-
-        setWhatsappTemplates(wa);
-        setEmailTemplates(em);
-      } catch (error) {
-        console.error("Template load failed:", error);
-        setWhatsappTemplates(DEFAULT_WHATSAPP_TEMPLATES);
-        setEmailTemplates(DEFAULT_EMAIL_TEMPLATES);
-      }
-    }
-
-    loadTemplates();
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const selectedWhatsappTemplate =
-    whatsappTemplates.find(
-      (t) => Number(t.id) === Number(selectedWhatsappTemplateId)
-    ) || whatsappTemplates[0];
-
-  const selectedEmailTemplate =
-    emailTemplates.find((t) => Number(t.id) === Number(selectedEmailTemplateId)) ||
-    emailTemplates[0];
-
-  useEffect(() => {
-    if (selectedWhatsappTemplate) {
-      setWhatsappEditor(selectedWhatsappTemplate.text || "");
-    }
-  }, [selectedWhatsappTemplate]);
-
-  useEffect(() => {
-    if (selectedEmailTemplate) {
-      setEmailSubjectEditor(selectedEmailTemplate.subject || "");
-      setEmailBodyEditor(selectedEmailTemplate.body || "");
-    }
-  }, [selectedEmailTemplate]);
-
-  // Hooks must stay above early return
-  const whatsappPreview = useMemo(() => {
-    return fillVars(whatsappEditor, form || {});
-  }, [whatsappEditor, form]);
-
-  const emailPreview = useMemo(() => {
-    return {
-      subject: fillVars(emailSubjectEditor, form || {}),
-      body: fillVars(emailBodyEditor, form || {}),
-    };
-  }, [emailSubjectEditor, emailBodyEditor, form]);
+  const notesHistory = useMemo(() => {
+    if (!form) return [];
+    if (Array.isArray(form.notesHistory)) return form.notesHistory;
+    if (Array.isArray(form.notes)) return form.notes;
+    return [];
+  }, [form]);
 
   if (!lead || !form) {
     return (
@@ -336,112 +334,95 @@ export default function LeadSidePanel({
     onUpdateLead(lead.id, { [field]: value });
   };
 
-  const phone = normalizePhone(form.phone);
+  const phone = normalizePhone(form.phone || form.mobile || "");
+  const email = form.email || form.user_email || "";
+  const linkedinUrl = form.linkedin || form.linkedinProfileUrl || "";
   const canCall = !!phone;
   const canWhatsApp = !!phone;
-  const canEmail = !!form.email;
-  const canLinkedIn = !!form.linkedin;
+  const canEmail = !!email;
+  const canLinkedIn = !!linkedinUrl;
 
-  const handleWhatsApp = () => {
-    if (!phone) return;
-    const encoded = encodeURIComponent(whatsappPreview);
-    window.open(`https://wa.me/${phone}?text=${encoded}`, "_blank");
-  };
-
-  const handleEmail = () => {
-    if (!form.email) return;
-    const encodedSubject = encodeURIComponent(emailPreview.subject);
-    const encodedBody = encodeURIComponent(emailPreview.body);
-    window.location.href = `mailto:${form.email}?subject=${encodedSubject}&body=${encodedBody}`;
-  };
-
-  const saveWhatsappTemplate = async () => {
-    if (!selectedWhatsappTemplate) return;
-    try {
-      setSavingWhatsapp(true);
-
-      const payload = {
-        channel: "whatsapp",
-        id: selectedWhatsappTemplate.id,
-        name: selectedWhatsappTemplate.name,
-        text: whatsappEditor,
-      };
-
-      const res = await fetch(
-        `/api/templates/whatsapp/${selectedWhatsappTemplate.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (!res.ok) throw new Error("Could not save WhatsApp template");
-
-      const updated = await res.json();
-
-      setWhatsappTemplates((prev) =>
-        prev.map((item) =>
-          Number(item.id) === Number(updated.id) ? updated : item
-        )
-      );
-    } catch (error) {
-      console.error(error);
-      alert(error.message || "Could not save WhatsApp template.");
-    } finally {
-      setSavingWhatsapp(false);
-    }
-  };
-
-  const saveEmailTemplate = async () => {
-    if (!selectedEmailTemplate) return;
-    try {
-      setSavingEmail(true);
-
-      const payload = {
-        channel: "email",
-        id: selectedEmailTemplate.id,
-        name: selectedEmailTemplate.name,
-        subject: emailSubjectEditor,
-        body: emailBodyEditor,
-      };
-
-      const res = await fetch(`/api/templates/email/${selectedEmailTemplate.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error("Could not save Email template");
-
-      const updated = await res.json();
-
-      setEmailTemplates((prev) =>
-        prev.map((item) =>
-          Number(item.id) === Number(updated.id) ? updated : item
-        )
-      );
-    } catch (error) {
-      console.error(error);
-      alert(error.message || "Could not save Email template.");
-    } finally {
-      setSavingEmail(false);
-    }
-  };
+  const aiMeta = getAiPriorityMeta(form.ai_priority);
+  const urgencyMeta = getUrgencyMeta(form.follow_up_urgency);
+  const aiReasons = Array.isArray(form.ai_reasons) ? form.ai_reasons : [];
 
   return (
     <div style={styles.panel}>
       <div style={styles.hero}>
         <h2 style={styles.heroTitle}>{form.contactName || "Unnamed Contact"}</h2>
         <p style={styles.heroSubtitle}>
-          {form.businessName || "No business name"} · {form.stage}
+          {form.businessName || "No business name"} · {form.stage || "No stage"}
         </p>
+
+        <div style={styles.aiHeroRow}>
+          <div
+            style={{
+              ...styles.aiPill,
+              color: aiMeta.color,
+              background: aiMeta.background,
+            }}
+          >
+            {aiMeta.label} ({form.ai_score || 0})
+          </div>
+
+          <div
+            style={{
+              ...styles.aiPill,
+              color: urgencyMeta.color,
+              background: urgencyMeta.background,
+            }}
+          >
+            {urgencyMeta.label}
+          </div>
+        </div>
       </div>
 
-      <div style={styles.body}>
+      <div style={styles.inner}>
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>AI Overview</h3>
+
+          <div style={styles.metricsGrid}>
+            <div style={styles.metricCard}>
+              <p style={styles.metricLabel}>Deal probability</p>
+              <p style={styles.metricValue}>{form.deal_probability || 0}%</p>
+            </div>
+
+            <div style={styles.metricCard}>
+              <p style={styles.metricLabel}>Forecast value</p>
+              <p style={styles.metricValue}>
+                {formatCurrency(form.estimated_value)}
+              </p>
+            </div>
+          </div>
+
+          {form.next_best_action ? (
+            <div style={styles.actionBox}>
+              <p style={styles.actionLabel}>Next best action</p>
+              <p style={styles.actionText}>{form.next_best_action}</p>
+            </div>
+          ) : null}
+        </div>
+
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>AI Reasons</h3>
+
+          {aiReasons.length === 0 ? (
+            <div style={styles.noteItem}>
+              <p style={styles.noteText}>No AI reasons available yet.</p>
+            </div>
+          ) : (
+            <div style={styles.reasonsWrap}>
+              {aiReasons.map((reason, index) => (
+                <div key={`${reason}-${index}`} style={styles.reasonItem}>
+                  • {reason}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Quick Actions</h3>
-
           <div style={styles.actionGrid}>
             <button
               style={styles.actionBtn}
@@ -453,7 +434,19 @@ export default function LeadSidePanel({
 
             <button
               style={styles.actionBtn}
-              onClick={handleEmail}
+              onClick={() =>
+                canWhatsApp && openSafe(`https://wa.me/${phone}`)
+              }
+              disabled={!canWhatsApp}
+            >
+              💬 WhatsApp
+            </button>
+
+            <button
+              style={styles.actionBtn}
+              onClick={() =>
+                canEmail && (window.location.href = `mailto:${email}`)
+              }
               disabled={!canEmail}
             >
               📧 Email
@@ -461,121 +454,10 @@ export default function LeadSidePanel({
 
             <button
               style={styles.actionBtn}
-              onClick={() => canLinkedIn && openSafe(form.linkedin)}
+              onClick={() => canLinkedIn && openSafe(linkedinUrl)}
               disabled={!canLinkedIn}
             >
               🔗 LinkedIn
-            </button>
-
-            <button
-              style={styles.actionBtn}
-              onClick={handleWhatsApp}
-              disabled={!canWhatsApp}
-            >
-              💬 WhatsApp
-            </button>
-          </div>
-        </div>
-
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>WhatsApp Template</h3>
-
-          <select
-            style={styles.input}
-            value={selectedWhatsappTemplateId}
-            onChange={(e) => setSelectedWhatsappTemplateId(Number(e.target.value))}
-          >
-            {whatsappTemplates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </select>
-
-          <textarea
-            style={styles.textarea}
-            value={whatsappEditor}
-            onChange={(e) => setWhatsappEditor(e.target.value)}
-            placeholder="Edit WhatsApp template"
-          />
-
-          <div style={styles.previewBox}>{whatsappPreview}</div>
-
-          <div style={styles.actionsRow}>
-            <button
-              style={styles.primaryBtn}
-              onClick={handleWhatsApp}
-              disabled={!canWhatsApp}
-            >
-              Open WhatsApp
-            </button>
-
-            <button
-              style={styles.secondaryBtn}
-              onClick={saveWhatsappTemplate}
-              disabled={savingWhatsapp}
-            >
-              {savingWhatsapp ? "Saving..." : "Save Template"}
-            </button>
-          </div>
-        </div>
-
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Email Template</h3>
-
-          <select
-            style={styles.input}
-            value={selectedEmailTemplateId}
-            onChange={(e) => setSelectedEmailTemplateId(Number(e.target.value))}
-          >
-            {emailTemplates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </select>
-
-          <label style={styles.label}>
-            Subject
-            <input
-              style={styles.input}
-              value={emailSubjectEditor}
-              onChange={(e) => setEmailSubjectEditor(e.target.value)}
-            />
-          </label>
-
-          <label style={styles.label}>
-            Body
-            <textarea
-              style={styles.textarea}
-              value={emailBodyEditor}
-              onChange={(e) => setEmailBodyEditor(e.target.value)}
-            />
-          </label>
-
-          <div style={styles.previewBox}>
-            <strong>Subject:</strong> {emailPreview.subject}
-            {"\n\n"}
-            <strong>Body:</strong>
-            {"\n"}
-            {emailPreview.body}
-          </div>
-
-          <div style={styles.actionsRow}>
-            <button
-              style={styles.primaryBtn}
-              onClick={handleEmail}
-              disabled={!canEmail}
-            >
-              Open Email
-            </button>
-
-            <button
-              style={styles.secondaryBtn}
-              onClick={saveEmailTemplate}
-              disabled={savingEmail}
-            >
-              {savingEmail ? "Saving..." : "Save Template"}
             </button>
           </div>
         </div>
@@ -603,20 +485,11 @@ export default function LeadSidePanel({
             </label>
 
             <label style={styles.label}>
-              Email
+              Mobile / Contact Number
               <input
                 style={styles.input}
-                value={form.email || ""}
-                onChange={(e) => patchField("email", e.target.value)}
-              />
-            </label>
-
-            <label style={styles.label}>
-              Contact Number
-              <input
-                style={styles.input}
-                value={form.phone || ""}
-                onChange={(e) => patchField("phone", e.target.value)}
+                value={form.mobile || form.phone || ""}
+                onChange={(e) => patchField("mobile", e.target.value)}
                 placeholder="27712345678"
               />
             </label>
@@ -625,8 +498,10 @@ export default function LeadSidePanel({
               LinkedIn URL
               <input
                 style={styles.input}
-                value={form.linkedin || ""}
-                onChange={(e) => patchField("linkedin", e.target.value)}
+                value={form.linkedinProfileUrl || form.linkedin || ""}
+                onChange={(e) =>
+                  patchField("linkedinProfileUrl", e.target.value)
+                }
                 placeholder="https://www.linkedin.com/in/..."
               />
             </label>
@@ -664,49 +539,144 @@ export default function LeadSidePanel({
               </label>
             </div>
 
+            <div style={styles.row2}>
+              <label style={styles.label}>
+                Quote Amount
+                <input
+                  style={styles.input}
+                  value={form.quoteAmount || ""}
+                  onChange={(e) => patchField("quoteAmount", e.target.value)}
+                  placeholder="e.g. 25000"
+                />
+              </label>
+
+              <label style={styles.label}>
+                Quote Status
+                <select
+                  style={styles.input}
+                  value={form.quoteStatus || "Not Sent"}
+                  onChange={(e) => patchField("quoteStatus", e.target.value)}
+                >
+                  <option value="Not Sent">Not Sent</option>
+                  <option value="Sent">Sent</option>
+                  <option value="Accepted">Accepted</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </label>
+            </div>
+
             <label style={styles.label}>
-              Source
+              Follow-up Date
+              <input
+                type="date"
+                style={styles.input}
+                value={form.followUpDate || ""}
+                onChange={(e) => patchField("followUpDate", e.target.value)}
+              />
+            </label>
+
+            <label style={styles.label}>
+              LinkedIn Role
               <input
                 style={styles.input}
-                value={form.source || ""}
-                onChange={(e) => patchField("source", e.target.value)}
+                value={form.linkedinRole || ""}
+                onChange={(e) => patchField("linkedinRole", e.target.value)}
+              />
+            </label>
+
+            <label style={styles.label}>
+              LinkedIn Headline
+              <input
+                style={styles.input}
+                value={form.linkedinHeadline || ""}
+                onChange={(e) => patchField("linkedinHeadline", e.target.value)}
+              />
+            </label>
+
+            <label style={styles.label}>
+              LinkedIn Location
+              <input
+                style={styles.input}
+                value={form.linkedinLocation || ""}
+                onChange={(e) => patchField("linkedinLocation", e.target.value)}
+              />
+            </label>
+
+            <label style={styles.label}>
+              LinkedIn Company
+              <input
+                style={styles.input}
+                value={form.linkedinCompany || ""}
+                onChange={(e) => patchField("linkedinCompany", e.target.value)}
+              />
+            </label>
+
+            <label style={styles.label}>
+              LinkedIn Keywords
+              <input
+                style={styles.input}
+                value={form.linkedinKeywords || ""}
+                onChange={(e) => patchField("linkedinKeywords", e.target.value)}
+              />
+            </label>
+
+            <label style={styles.label}>
+              Category
+              <input
+                style={styles.input}
+                value={form.category || ""}
+                onChange={(e) => patchField("category", e.target.value)}
+              />
+            </label>
+
+            <label style={styles.label}>
+              Working Notes
+              <textarea
+                style={styles.textarea}
+                value={form.notes || ""}
+                onChange={(e) => patchField("notes", e.target.value)}
+                placeholder="General lead notes..."
               />
             </label>
           </div>
         </div>
 
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Notes</h3>
+          <h3 style={styles.sectionTitle}>Notes History</h3>
 
-          <textarea
-            style={styles.textarea}
-            placeholder="Add follow-up notes, call results, outreach history..."
-            value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
-          />
+          <div style={styles.noteInputWrap}>
+            <textarea
+              style={styles.textarea}
+              placeholder="Add call notes, follow-up notes, outreach history..."
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+            />
+            <button
+              style={styles.primaryBtn}
+              onClick={() => {
+                onAddNote(lead.id, noteText);
+                setNoteText("");
+              }}
+            >
+              + Add Note
+            </button>
+          </div>
 
-          <button
-            style={styles.primaryBtn}
-            onClick={() => {
-              onAddNote(lead.id, noteText);
-              setNoteText("");
-            }}
-          >
-            + Add Note
-          </button>
-
-          <div style={styles.notesList}>
-            {(form.notes || []).length === 0 ? (
+          <div style={styles.noteList}>
+            {notesHistory.length === 0 ? (
               <div style={styles.noteItem}>
                 <p style={styles.noteText}>No notes added yet.</p>
               </div>
             ) : (
-              form.notes.map((note) => (
-                <div key={note.id} style={styles.noteItem}>
-                  <p style={styles.noteDate}>{note.createdAt}</p>
-                  <p style={styles.noteText}>{note.text}</p>
-                </div>
-              ))
+              notesHistory
+                .slice()
+                .reverse()
+                .map((note, index) => (
+                  <div key={`${note.createdAt || index}-${index}`} style={styles.noteItem}>
+                    <p style={styles.noteDate}>{formatNoteDate(note.createdAt)}</p>
+                    <p style={styles.noteText}>{note.text}</p>
+                  </div>
+                ))
             )}
           </div>
         </div>

@@ -8,6 +8,7 @@ export default function SignupPage() {
   const { signup } = useAuth();
   const [searchParams] = useSearchParams();
 
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,9 +26,10 @@ export default function SignupPage() {
     e.preventDefault();
     setError("");
 
+    const cleanFullName = fullName.trim();
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!cleanEmail || !password || !confirmPassword) {
+    if (!cleanFullName || !cleanEmail || !password || !confirmPassword) {
       setError("Please complete all fields.");
       return;
     }
@@ -49,7 +51,7 @@ export default function SignupPage() {
 
     try {
       setSubmitting(true);
-      await signup(cleanEmail, password);
+      await signup(cleanFullName, cleanEmail, password);
       navigate("/dashboard/overview");
     } catch (err) {
       console.error(err);
@@ -110,6 +112,18 @@ export default function SignupPage() {
 
           <form onSubmit={handleSignup}>
             <div style={styles.fieldWrap}>
+              <label style={styles.label}>Full name</label>
+              <input
+                type="text"
+                placeholder="Your full name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                style={styles.input}
+                autoComplete="name"
+              />
+            </div>
+
+            <div style={styles.fieldWrap}>
               <label style={styles.label}>Email</label>
               <input
                 type="email"
@@ -158,7 +172,7 @@ export default function SignupPage() {
 
           <div style={styles.secondaryLinkRow}>
             Already have an account?{" "}
-            <Link to="/" style={styles.link}>
+            <Link to="/login" style={styles.link}>
               Sign in
             </Link>
           </div>
