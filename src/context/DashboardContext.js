@@ -1,4 +1,10 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 
 export const DashboardContext = createContext(null);
 
@@ -56,7 +62,9 @@ function computeAiScore(lead) {
 
   const noteScore = lead.notes?.trim() ? 8 : 0;
   const contactScore =
-    lead.contactName?.trim() && (lead.email?.trim() || lead.phone?.trim()) ? 10 : 0;
+    lead.contactName?.trim() && (lead.email?.trim() || lead.phone?.trim())
+      ? 10
+      : 0;
 
   const rawScore =
     estimatedValueScore +
@@ -87,43 +95,46 @@ export function DashboardProvider({ children }) {
   const [leads, setLeads] = useState([]);
   const [form, setForm] = useState(defaultLeadForm);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setForm(defaultLeadForm);
-  };
+  }, []);
 
-  const handleAddLead = (event) => {
-    if (event?.preventDefault) {
-      event.preventDefault();
-    }
+  const handleAddLead = useCallback(
+    (event) => {
+      if (event?.preventDefault) {
+        event.preventDefault();
+      }
 
-    const aiScore = computeAiScore(form);
-    const aiPriority = getAiPriority(aiScore);
+      const aiScore = computeAiScore(form);
+      const aiPriority = getAiPriority(aiScore);
 
-    const newLead = {
-      id: `lead_${Date.now()}`,
-      businessName: form.businessName?.trim() || "",
-      contactName: form.contactName?.trim() || "",
-      email: form.email?.trim() || "",
-      phone: form.phone?.trim() || "",
-      location: form.location?.trim() || "",
-      source: form.source || "LinkedIn",
-      status: form.status || "New",
-      stage: form.stage || "Prospect",
-      category: form.category || "",
-      quoteStatus: form.quoteStatus || "",
-      estimated_value: normalizeNumber(form.estimatedValue),
-      deal_probability: normalizeNumber(form.dealProbability),
-      next_follow_up: form.nextFollowUp || "",
-      notes: form.notes?.trim() || "",
-      ai_score: aiScore,
-      ai_priority: aiPriority,
-      next_best_action: getNextBestAction(form, aiScore),
-      created_at: new Date().toISOString(),
-    };
+      const newLead = {
+        id: `lead_${Date.now()}`,
+        businessName: form.businessName?.trim() || "",
+        contactName: form.contactName?.trim() || "",
+        email: form.email?.trim() || "",
+        phone: form.phone?.trim() || "",
+        location: form.location?.trim() || "",
+        source: form.source || "LinkedIn",
+        status: form.status || "New",
+        stage: form.stage || "Prospect",
+        category: form.category || "",
+        quoteStatus: form.quoteStatus || "",
+        estimated_value: normalizeNumber(form.estimatedValue),
+        deal_probability: normalizeNumber(form.dealProbability),
+        next_follow_up: form.nextFollowUp || "",
+        notes: form.notes?.trim() || "",
+        ai_score: aiScore,
+        ai_priority: aiPriority,
+        next_best_action: getNextBestAction(form, aiScore),
+        created_at: new Date().toISOString(),
+      };
 
-    setLeads((prev) => [newLead, ...prev]);
-    resetForm();
-  };
+      setLeads((prev) => [newLead, ...prev]);
+      resetForm();
+    },
+    [form, resetForm]
+  );
 
   const linkedinSearchQuery = useMemo(() => {
     const parts = [form.linkedinTitle, form.linkedinKeyword, form.location]
@@ -133,7 +144,7 @@ export function DashboardProvider({ children }) {
     return parts.join(" ");
   }, [form.linkedinTitle, form.linkedinKeyword, form.location]);
 
-  const openLinkedInSearch = () => {
+  const openLinkedInSearch = useCallback(() => {
     if (!linkedinSearchQuery) return;
 
     const url = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
@@ -141,9 +152,9 @@ export function DashboardProvider({ children }) {
     )}`;
 
     window.open(url, "_blank", "noopener,noreferrer");
-  };
+  }, [linkedinSearchQuery]);
 
-  const saveLinkedInLeadToForm = () => {
+  const saveLinkedInLeadToForm = useCallback(() => {
     setForm((prev) => ({
       ...prev,
       businessName: prev.businessName || prev.linkedinKeyword || "",
@@ -153,7 +164,7 @@ export function DashboardProvider({ children }) {
         ? `${prev.notes}\nGenerated from LinkedIn workflow`
         : "Generated from LinkedIn workflow",
     }));
-  };
+  }, []);
 
   const todayFollowUps = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -177,7 +188,16 @@ export function DashboardProvider({ children }) {
       todayFollowUps,
       resetForm,
     }),
-    [leads, form, linkedinSearchQuery, todayFollowUps]
+    [
+      leads,
+      form,
+      handleAddLead,
+      linkedinSearchQuery,
+      openLinkedInSearch,
+      saveLinkedInLeadToForm,
+      todayFollowUps,
+      resetForm,
+    ]
   );
 
   return (

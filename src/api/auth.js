@@ -3,11 +3,11 @@ const API_URL =
   "https://leadradar-backend-oziv.onrender.com/api";
 
 export function getAccessToken() {
-  return localStorage.getItem("accessToken");
+  return localStorage.getItem("accessToken") || null;
 }
 
 export function getRefreshToken() {
-  return localStorage.getItem("refreshToken");
+  return localStorage.getItem("refreshToken") || null;
 }
 
 export function getStoredUser() {
@@ -20,23 +20,21 @@ export function getStoredWorkspace() {
   return raw ? JSON.parse(raw) : null;
 }
 
-export function setAuthSession(data) {
-  if (!data) return;
-
-  if (data.accessToken) {
-    localStorage.setItem("accessToken", data.accessToken);
+export function setAuthSession({ accessToken, refreshToken, user, workspace }) {
+  if (accessToken) {
+    localStorage.setItem("accessToken", accessToken);
   }
 
-  if (data.refreshToken) {
-    localStorage.setItem("refreshToken", data.refreshToken);
+  if (refreshToken) {
+    localStorage.setItem("refreshToken", refreshToken);
   }
 
-  if (data.user) {
-    localStorage.setItem("authUser", JSON.stringify(data.user));
+  if (user) {
+    localStorage.setItem("authUser", JSON.stringify(user));
   }
 
-  if (data.workspace) {
-    localStorage.setItem("authWorkspace", JSON.stringify(data.workspace));
+  if (workspace) {
+    localStorage.setItem("authWorkspace", JSON.stringify(workspace));
   }
 }
 
