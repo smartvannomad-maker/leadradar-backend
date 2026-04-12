@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import knex from "../db/knex.js";
+import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
 
@@ -33,10 +34,22 @@ router.post("/register", async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
+    const workspaceId = uuidv4();
+
+    await knex("workspaces").insert({
+      id: workspaceId,
+      name: cleanEmail,
+      plan: "starter",
+      subscription_status: "active",
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
     const insertedUsers = await knex("users")
       .insert({
         email: cleanEmail,
         password_hash: passwordHash,
+        workspace_id: workspaceId,
       })
       .returning("*");
 
@@ -45,12 +58,17 @@ router.post("/register", async (req, res, next) => {
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
+      workspaceId: user.workspace_id,
     });
 
     return res.status(201).json({
       user: {
         id: user.id,
         email: user.email,
+        workspaceId: user.workspace_id,
+      },
+      workspace: {
+        id: user.workspace_id,
       },
       accessToken,
     });
@@ -89,12 +107,17 @@ router.post("/login", async (req, res, next) => {
     const accessToken = signAccessToken({
       userId: user.id,
       email: user.email,
+      workspaceId: user.workspace_id,
     });
 
     return res.json({
       user: {
         id: user.id,
         email: user.email,
+        workspaceId: user.workspace_id,
+      },
+      workspace: {
+        id: user.workspace_id,
       },
       accessToken,
     });
