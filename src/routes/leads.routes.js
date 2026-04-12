@@ -1,3 +1,4 @@
+console.log("🔥 NEW LEADS ROUTE LOADED");
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db/knex.js";
@@ -24,11 +25,16 @@ function mapLead(row) {
     id: row.id,
     businessName: row.business_name,
     contactName: row.contact_name,
+    email: row.email,
+    phone: row.phone,
     mobile: row.mobile,
+    location: row.location,
+    source: row.source,
     category: row.category,
     status: row.status,
     stage: row.stage,
     followUpDate: row.follow_up_date,
+    nextFollowUp: row.next_follow_up,
     notes: row.notes,
     notesHistory: safeJsonParse(row.notes_history, []),
     quoteAmount: row.quote_amount,
@@ -39,8 +45,6 @@ function mapLead(row) {
     linkedinCompany: row.linkedin_company,
     linkedinProfileUrl: row.linkedin_profile_url,
     linkedinHeadline: row.linkedin_headline,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
     ai_score: row.ai_score || 0,
     ai_priority: row.ai_priority || "cold",
     ai_reasons: safeJsonParse(row.ai_reasons, []),
@@ -48,6 +52,10 @@ function mapLead(row) {
     estimated_value: row.estimated_value || 0,
     next_best_action: row.next_best_action || "",
     follow_up_urgency: row.follow_up_urgency || "low",
+    userId: row.user_id,
+    userEmail: row.user_email,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -66,18 +74,31 @@ function parseImportRow(row = {}) {
   const baseLead = {
     businessName,
     contactName,
+    email: normalizeText(row.email || row.Email),
+    phone: normalizeText(row.phone || row.Phone),
     mobile: normalizeText(row.mobile || row.Mobile),
+    location: normalizeText(row.location || row.Location),
+    source: normalizeText(row.source || row.Source) || "LinkedIn",
     category: normalizeText(row.category || row.Category) || "Small Business",
-    status: normalizeText(row.status || row.Status) || "new",
-    stage: normalizeText(row.stage || row.Stage) || "new",
+    status: normalizeText(row.status || row.Status) || "New",
+    stage: normalizeText(row.stage || row.Stage) || "Prospect",
     followUpDate:
-      row.followUpDate || row["Follow Up Date"] || row.follow_up_date || null,
+      row.followUpDate ||
+      row["Follow Up Date"] ||
+      row.follow_up_date ||
+      null,
+    nextFollowUp:
+      row.nextFollowUp ||
+      row["Next Follow Up"] ||
+      row.next_follow_up ||
+      null,
     notes: normalizeText(row.notes || row.Notes),
     quoteAmount:
       row.quoteAmount || row["Quote Amount"] || row.quote_amount || null,
     quoteStatus:
-      normalizeText(row.quoteStatus || row["Quote Status"] || row.quote_status) ||
-      "not_sent",
+      normalizeText(
+        row.quoteStatus || row["Quote Status"] || row.quote_status
+      ) || "not_sent",
     linkedinRole: normalizeText(
       row.linkedinRole || row["LinkedIn Role"] || row.linkedin_role
     ),
@@ -91,11 +112,20 @@ function parseImportRow(row = {}) {
       row.linkedinCompany || row["LinkedIn Company"] || row.linkedin_company
     ),
     linkedinProfileUrl: normalizeText(
-      row.linkedinProfileUrl || row["LinkedIn Profile URL"] || row.linkedin_profile_url
+      row.linkedinProfileUrl ||
+        row["LinkedIn Profile URL"] ||
+        row.linkedin_profile_url
     ),
     linkedinHeadline: normalizeText(
       row.linkedinHeadline || row["LinkedIn Headline"] || row.linkedin_headline
     ),
+    estimatedValue:
+      row.estimatedValue || row["Estimated Value"] || row.estimated_value || 0,
+    dealProbability:
+      row.dealProbability ||
+      row["Deal Probability"] ||
+      row.deal_probability ||
+      0,
   };
 
   const ai = scoreLead(baseLead);
@@ -103,11 +133,16 @@ function parseImportRow(row = {}) {
   return {
     business_name: baseLead.businessName,
     contact_name: baseLead.contactName,
+    email: baseLead.email,
+    phone: baseLead.phone,
     mobile: baseLead.mobile,
+    location: baseLead.location,
+    source: baseLead.source,
     category: baseLead.category,
     status: baseLead.status,
     stage: baseLead.stage,
     follow_up_date: baseLead.followUpDate,
+    next_follow_up: baseLead.nextFollowUp,
     notes: baseLead.notes,
     notes_history: JSON.stringify(
       baseLead.notes
@@ -140,7 +175,7 @@ function parseImportRow(row = {}) {
 router.get("/", async (req, res) => {
   try {
     const leads = await db("leads")
-      .where({ workspace_id: req.user.workspaceId })
+      .where({ user_id: req.user.userId })
       .orderBy([
         { column: "ai_score", order: "desc" },
         { column: "created_at", order: "desc" },
@@ -160,16 +195,20 @@ router.post("/", async (req, res) => {
 
     const lead = {
       id: uuidv4(),
-      created_by: req.user.id,
-      workspace_id: req.user.workspaceId,
+      user_id: req.user.userId,
       user_email: req.user.email || null,
-      business_name: normalizeText(body.businessName) || "LinkedIn Lead",
+      business_name: normalizeText(body.businessName) || "New Lead",
       contact_name: normalizeText(body.contactName) || "",
+      email: normalizeText(body.email) || "",
+      phone: normalizeText(body.phone) || "",
       mobile: normalizeText(body.mobile) || "",
+      location: normalizeText(body.location) || "",
+      source: normalizeText(body.source) || "LinkedIn",
       category: normalizeText(body.category) || "Small Business",
-      status: normalizeText(body.status) || "new",
-      stage: normalizeText(body.stage) || "new",
+      status: normalizeText(body.status) || "New",
+      stage: normalizeText(body.stage) || "Prospect",
       follow_up_date: body.followUpDate || null,
+      next_follow_up: body.nextFollowUp || null,
       notes: normalizeText(body.notes) || "",
       notes_history: JSON.stringify(
         Array.isArray(body.notesHistory) ? body.notesHistory : []
@@ -198,7 +237,7 @@ router.post("/", async (req, res) => {
     const createdLead = await db("leads")
       .where({
         id: lead.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .first();
 
@@ -237,7 +276,7 @@ router.post("/import", async (req, res) => {
 
       const duplicate = await db("leads")
         .where({
-          workspace_id: req.user.workspaceId,
+          user_id: req.user.userId,
           business_name: parsed.business_name,
           contact_name: parsed.contact_name,
         })
@@ -254,8 +293,7 @@ router.post("/import", async (req, res) => {
 
       const lead = {
         id: uuidv4(),
-        created_by: req.user.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
         user_email: req.user.email || null,
         ...parsed,
         created_at: new Date(),
@@ -269,11 +307,8 @@ router.post("/import", async (req, res) => {
     const createdRows = created.length
       ? await db("leads")
           .whereIn("id", created)
-          .andWhere({ workspace_id: req.user.workspaceId })
-          .orderBy([
-            { column: "ai_score", order: "desc" },
-            { column: "created_at", order: "desc" },
-          ])
+          .andWhere({ user_id: req.user.userId })
+          .orderBy([{ column: "created_at", order: "desc" }])
       : [];
 
     return res.status(201).json({
@@ -296,7 +331,7 @@ router.patch("/:id", async (req, res) => {
     const existingLead = await db("leads")
       .where({
         id: req.params.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .first();
 
@@ -311,11 +346,16 @@ router.patch("/:id", async (req, res) => {
     const fieldMap = {
       businessName: "business_name",
       contactName: "contact_name",
+      email: "email",
+      phone: "phone",
       mobile: "mobile",
+      location: "location",
+      source: "source",
       category: "category",
       status: "status",
       stage: "stage",
       followUpDate: "follow_up_date",
+      nextFollowUp: "next_follow_up",
       notes: "notes",
       quoteAmount: "quote_amount",
       quoteStatus: "quote_status",
@@ -340,11 +380,16 @@ router.patch("/:id", async (req, res) => {
     const mergedForScoring = {
       businessName: req.body?.businessName ?? existingLead.business_name ?? "",
       contactName: req.body?.contactName ?? existingLead.contact_name ?? "",
+      email: req.body?.email ?? existingLead.email ?? "",
+      phone: req.body?.phone ?? existingLead.phone ?? "",
       mobile: req.body?.mobile ?? existingLead.mobile ?? "",
+      location: req.body?.location ?? existingLead.location ?? "",
+      source: req.body?.source ?? existingLead.source ?? "",
       category: req.body?.category ?? existingLead.category ?? "",
       status: req.body?.status ?? existingLead.status ?? "",
       stage: req.body?.stage ?? existingLead.stage ?? "",
       followUpDate: req.body?.followUpDate ?? existingLead.follow_up_date ?? null,
+      nextFollowUp: req.body?.nextFollowUp ?? existingLead.next_follow_up ?? null,
       notes: req.body?.notes ?? existingLead.notes ?? "",
       notesHistory: Array.isArray(req.body?.notesHistory)
         ? req.body.notesHistory
@@ -352,11 +397,19 @@ router.patch("/:id", async (req, res) => {
       quoteAmount: req.body?.quoteAmount ?? existingLead.quote_amount ?? null,
       quoteStatus: req.body?.quoteStatus ?? existingLead.quote_status ?? "",
       linkedinRole: req.body?.linkedinRole ?? existingLead.linkedin_role ?? "",
-      linkedinLocation: req.body?.linkedinLocation ?? existingLead.linkedin_location ?? "",
-      linkedinKeywords: req.body?.linkedinKeywords ?? existingLead.linkedin_keywords ?? "",
-      linkedinCompany: req.body?.linkedinCompany ?? existingLead.linkedin_company ?? "",
-      linkedinProfileUrl: req.body?.linkedinProfileUrl ?? existingLead.linkedin_profile_url ?? "",
-      linkedinHeadline: req.body?.linkedinHeadline ?? existingLead.linkedin_headline ?? "",
+      linkedinLocation:
+        req.body?.linkedinLocation ?? existingLead.linkedin_location ?? "",
+      linkedinKeywords:
+        req.body?.linkedinKeywords ?? existingLead.linkedin_keywords ?? "",
+      linkedinCompany:
+        req.body?.linkedinCompany ?? existingLead.linkedin_company ?? "",
+      linkedinProfileUrl:
+        req.body?.linkedinProfileUrl ?? existingLead.linkedin_profile_url ?? "",
+      linkedinHeadline:
+        req.body?.linkedinHeadline ?? existingLead.linkedin_headline ?? "",
+      estimatedValue: req.body?.estimatedValue ?? existingLead.estimated_value ?? 0,
+      dealProbability:
+        req.body?.dealProbability ?? existingLead.deal_probability ?? 0,
     };
 
     const ai = scoreLead(mergedForScoring);
@@ -372,14 +425,14 @@ router.patch("/:id", async (req, res) => {
     await db("leads")
       .where({
         id: req.params.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .update(updates);
 
     const updatedLead = await db("leads")
       .where({
         id: req.params.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .first();
 
@@ -395,7 +448,7 @@ router.delete("/:id", async (req, res) => {
     const deleted = await db("leads")
       .where({
         id: req.params.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .del();
 
@@ -415,7 +468,7 @@ router.post("/:id/notes", async (req, res) => {
     const lead = await db("leads")
       .where({
         id: req.params.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .first();
 
@@ -435,11 +488,16 @@ router.post("/:id/notes", async (req, res) => {
     const mergedForScoring = {
       businessName: lead.business_name,
       contactName: lead.contact_name,
+      email: lead.email,
+      phone: lead.phone,
       mobile: lead.mobile,
+      location: lead.location,
+      source: lead.source,
       category: lead.category,
       status: lead.status,
       stage: lead.stage,
       followUpDate: lead.follow_up_date,
+      nextFollowUp: lead.next_follow_up,
       notes: lead.notes,
       notesHistory: nextHistory,
       quoteAmount: lead.quote_amount,
@@ -450,6 +508,8 @@ router.post("/:id/notes", async (req, res) => {
       linkedinCompany: lead.linkedin_company,
       linkedinProfileUrl: lead.linkedin_profile_url,
       linkedinHeadline: lead.linkedin_headline,
+      estimatedValue: lead.estimated_value,
+      dealProbability: lead.deal_probability,
     };
 
     const ai = scoreLead(mergedForScoring);
@@ -457,7 +517,7 @@ router.post("/:id/notes", async (req, res) => {
     await db("leads")
       .where({
         id: req.params.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .update({
         notes_history: JSON.stringify(nextHistory),
@@ -474,7 +534,7 @@ router.post("/:id/notes", async (req, res) => {
     const updatedLead = await db("leads")
       .where({
         id: req.params.id,
-        workspace_id: req.user.workspaceId,
+        user_id: req.user.userId,
       })
       .first();
 

@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 
-const ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_SECRET;
+const ACCESS_TOKEN_SECRET = process.env.JWT_SECRET;
 const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET;
 
 export function signAccessToken(user) {
@@ -8,9 +8,9 @@ export function signAccessToken(user) {
     {
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role || "user",
       workspaceId: user.workspaceId,
-      workspaceRole: user.workspaceRole,
+      workspaceRole: user.workspaceRole || "member",
     },
     ACCESS_TOKEN_SECRET,
     { expiresIn: "15m" }
@@ -22,9 +22,9 @@ export function signRefreshToken(user) {
     {
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role || "user",
       workspaceId: user.workspaceId,
-      workspaceRole: user.workspaceRole,
+      workspaceRole: user.workspaceRole || "member",
     },
     REFRESH_TOKEN_SECRET,
     { expiresIn: "7d" }

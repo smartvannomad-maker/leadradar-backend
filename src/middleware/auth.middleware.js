@@ -1,26 +1,24 @@
-import { verifyAccessToken } from "../utils/jwt.js";
+import jwt from "jsonwebtoken";
 
 export function requireAuth(req, res, next) {
   try {
     const authHeader = req.headers.authorization || "";
-    const [scheme, token] = authHeader.split(" ");
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : null;
 
-    if (scheme !== "Bearer" || !token) {
+    if (!token) {
+      console.log("AUTH FAIL: no bearer token");
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const payload = verifyAccessToken(token);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("AUTH OK:", decoded);
 
-    req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role,
-      workspaceId: payload.workspaceId,
-      workspaceRole: payload.workspaceRole || "member",
-    };
-
+    req.user = decoded;
     return next();
   } catch (error) {
+    console.log("AUTH FAIL:", error.name, error.message);
     return res.status(401).json({ message: "Unauthorized" });
   }
 }
