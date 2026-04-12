@@ -1,4 +1,3 @@
-console.log("🔥 NEW LEADS ROUTE LOADED");
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db/knex.js";
@@ -25,7 +24,6 @@ function mapLead(row) {
     id: row.id,
     businessName: row.business_name,
     contactName: row.contact_name,
-    email: row.email,
     phone: row.phone,
     mobile: row.mobile,
     location: row.location,
@@ -52,7 +50,8 @@ function mapLead(row) {
     estimated_value: row.estimated_value || 0,
     next_best_action: row.next_best_action || "",
     follow_up_urgency: row.follow_up_urgency || "low",
-    userId: row.user_id,
+    workspaceId: row.workspace_id,
+    createdBy: row.created_by,
     userEmail: row.user_email,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -74,7 +73,6 @@ function parseImportRow(row = {}) {
   const baseLead = {
     businessName,
     contactName,
-    email: normalizeText(row.email || row.Email),
     phone: normalizeText(row.phone || row.Phone),
     mobile: normalizeText(row.mobile || row.Mobile),
     location: normalizeText(row.location || row.Location),
@@ -133,7 +131,6 @@ function parseImportRow(row = {}) {
   return {
     business_name: baseLead.businessName,
     contact_name: baseLead.contactName,
-    email: baseLead.email,
     phone: baseLead.phone,
     mobile: baseLead.mobile,
     location: baseLead.location,
@@ -174,8 +171,12 @@ function parseImportRow(row = {}) {
 
 router.get("/", async (req, res) => {
   try {
+    if (!req.user?.workspaceId) {
+      return res.status(400).json({ message: "Workspace not resolved" });
+    }
+
     const leads = await db("leads")
-      .where({ user_id: req.user.userId })
+      .where({ workspace_id: req.user.workspaceId })
       .orderBy([
         { column: "ai_score", order: "desc" },
         { column: "created_at", order: "desc" },
@@ -190,16 +191,20 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
+    if (!req.user?.workspaceId) {
+      return res.status(400).json({ message: "Workspace not resolved" });
+    }
+
     const body = req.body || {};
     const ai = scoreLead(body);
 
     const lead = {
       id: uuidv4(),
-      user_id: req.user.userId,
+      workspace_id: req.user.workspaceId,
+      created_by: req.user.userId,
       user_email: req.user.email || null,
       business_name: normalizeText(body.businessName) || "New Lead",
       contact_name: normalizeText(body.contactName) || "",
-      email: normalizeText(body.email) || "",
       phone: normalizeText(body.phone) || "",
       mobile: normalizeText(body.mobile) || "",
       location: normalizeText(body.location) || "",
@@ -237,7 +242,7 @@ router.post("/", async (req, res) => {
     const createdLead = await db("leads")
       .where({
         id: lead.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .first();
 
@@ -252,6 +257,10 @@ router.post("/", async (req, res) => {
 
 router.post("/import", async (req, res) => {
   try {
+    if (!req.user?.workspaceId) {
+      return res.status(400).json({ message: "Workspace not resolved" });
+    }
+
     const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
 
     if (!rows.length) {
@@ -276,7 +285,7 @@ router.post("/import", async (req, res) => {
 
       const duplicate = await db("leads")
         .where({
-          user_id: req.user.userId,
+          workspace_id: req.user.workspaceId,
           business_name: parsed.business_name,
           contact_name: parsed.contact_name,
         })
@@ -293,7 +302,8 @@ router.post("/import", async (req, res) => {
 
       const lead = {
         id: uuidv4(),
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
+        created_by: req.user.userId,
         user_email: req.user.email || null,
         ...parsed,
         created_at: new Date(),
@@ -307,7 +317,7 @@ router.post("/import", async (req, res) => {
     const createdRows = created.length
       ? await db("leads")
           .whereIn("id", created)
-          .andWhere({ user_id: req.user.userId })
+          .andWhere({ workspace_id: req.user.workspaceId })
           .orderBy([{ column: "created_at", order: "desc" }])
       : [];
 
@@ -328,10 +338,14 @@ router.post("/import", async (req, res) => {
 
 router.patch("/:id", async (req, res) => {
   try {
+    if (!req.user?.workspaceId) {
+      return res.status(400).json({ message: "Workspace not resolved" });
+    }
+
     const existingLead = await db("leads")
       .where({
         id: req.params.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .first();
 
@@ -346,7 +360,6 @@ router.patch("/:id", async (req, res) => {
     const fieldMap = {
       businessName: "business_name",
       contactName: "contact_name",
-      email: "email",
       phone: "phone",
       mobile: "mobile",
       location: "location",
@@ -380,7 +393,6 @@ router.patch("/:id", async (req, res) => {
     const mergedForScoring = {
       businessName: req.body?.businessName ?? existingLead.business_name ?? "",
       contactName: req.body?.contactName ?? existingLead.contact_name ?? "",
-      email: req.body?.email ?? existingLead.email ?? "",
       phone: req.body?.phone ?? existingLead.phone ?? "",
       mobile: req.body?.mobile ?? existingLead.mobile ?? "",
       location: req.body?.location ?? existingLead.location ?? "",
@@ -425,14 +437,14 @@ router.patch("/:id", async (req, res) => {
     await db("leads")
       .where({
         id: req.params.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .update(updates);
 
     const updatedLead = await db("leads")
       .where({
         id: req.params.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .first();
 
@@ -445,10 +457,14 @@ router.patch("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    if (!req.user?.workspaceId) {
+      return res.status(400).json({ message: "Workspace not resolved" });
+    }
+
     const deleted = await db("leads")
       .where({
         id: req.params.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .del();
 
@@ -465,10 +481,14 @@ router.delete("/:id", async (req, res) => {
 
 router.post("/:id/notes", async (req, res) => {
   try {
+    if (!req.user?.workspaceId) {
+      return res.status(400).json({ message: "Workspace not resolved" });
+    }
+
     const lead = await db("leads")
       .where({
         id: req.params.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .first();
 
@@ -488,7 +508,6 @@ router.post("/:id/notes", async (req, res) => {
     const mergedForScoring = {
       businessName: lead.business_name,
       contactName: lead.contact_name,
-      email: lead.email,
       phone: lead.phone,
       mobile: lead.mobile,
       location: lead.location,
@@ -517,7 +536,7 @@ router.post("/:id/notes", async (req, res) => {
     await db("leads")
       .where({
         id: req.params.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .update({
         notes_history: JSON.stringify(nextHistory),
@@ -534,7 +553,7 @@ router.post("/:id/notes", async (req, res) => {
     const updatedLead = await db("leads")
       .where({
         id: req.params.id,
-        user_id: req.user.userId,
+        workspace_id: req.user.workspaceId,
       })
       .first();
 
