@@ -28,18 +28,15 @@ function mapLead(row) {
     id: row.id,
     businessName: row.business_name,
     contactName: row.contact_name,
-
-    // These do not exist in your current DB schema yet.
     phone: "",
     mobile: "",
     location: "",
-
     source: row.source,
     category: row.category,
     status: row.status,
     stage: row.stage,
     followUpDate: row.follow_up_date,
-    nextFollowUp: row.next_follow_up,
+    nextFollowUp: null,
     notes: row.notes,
     notesHistory: safeJsonParse(row.notes_history, []),
     quoteAmount: row.quote_amount,
@@ -67,91 +64,36 @@ function mapLead(row) {
 
 function buildLeadScoreInput(body = {}, existingLead = null) {
   return {
-    businessName:
-      body.businessName ??
-      existingLead?.business_name ??
-      "",
-    contactName:
-      body.contactName ??
-      existingLead?.contact_name ??
-      "",
-
-    // Not in DB yet, but safe for scoring input
+    businessName: body.businessName ?? existingLead?.business_name ?? "",
+    contactName: body.contactName ?? existingLead?.contact_name ?? "",
     phone: body.phone ?? "",
     mobile: body.mobile ?? "",
     location: body.location ?? "",
-
-    source:
-      body.source ??
-      existingLead?.source ??
-      "",
-    category:
-      body.category ??
-      existingLead?.category ??
-      "",
-    status:
-      body.status ??
-      existingLead?.status ??
-      "",
-    stage:
-      body.stage ??
-      existingLead?.stage ??
-      "",
-    followUpDate:
-      body.followUpDate ??
-      existingLead?.follow_up_date ??
-      null,
-    nextFollowUp:
-      body.nextFollowUp ??
-      existingLead?.next_follow_up ??
-      null,
-    notes:
-      body.notes ??
-      existingLead?.notes ??
-      "",
+    source: body.source ?? existingLead?.source ?? "",
+    category: body.category ?? existingLead?.category ?? "",
+    status: body.status ?? existingLead?.status ?? "",
+    stage: body.stage ?? existingLead?.stage ?? "",
+    followUpDate: body.followUpDate ?? existingLead?.follow_up_date ?? null,
+    nextFollowUp: null,
+    notes: body.notes ?? existingLead?.notes ?? "",
     notesHistory: Array.isArray(body.notesHistory)
       ? body.notesHistory
       : safeJsonParse(existingLead?.notes_history, []),
-    quoteAmount:
-      body.quoteAmount ??
-      existingLead?.quote_amount ??
-      null,
-    quoteStatus:
-      body.quoteStatus ??
-      existingLead?.quote_status ??
-      "",
-    linkedinRole:
-      body.linkedinRole ??
-      existingLead?.linkedin_role ??
-      "",
+    quoteAmount: body.quoteAmount ?? existingLead?.quote_amount ?? null,
+    quoteStatus: body.quoteStatus ?? existingLead?.quote_status ?? "",
+    linkedinRole: body.linkedinRole ?? existingLead?.linkedin_role ?? "",
     linkedinLocation:
-      body.linkedinLocation ??
-      existingLead?.linkedin_location ??
-      "",
+      body.linkedinLocation ?? existingLead?.linkedin_location ?? "",
     linkedinKeywords:
-      body.linkedinKeywords ??
-      existingLead?.linkedin_keywords ??
-      "",
-    linkedinCompany:
-      body.linkedinCompany ??
-      existingLead?.linkedin_company ??
-      "",
+      body.linkedinKeywords ?? existingLead?.linkedin_keywords ?? "",
+    linkedinCompany: body.linkedinCompany ?? existingLead?.linkedin_company ?? "",
     linkedinProfileUrl:
-      body.linkedinProfileUrl ??
-      existingLead?.linkedin_profile_url ??
-      "",
+      body.linkedinProfileUrl ?? existingLead?.linkedin_profile_url ?? "",
     linkedinHeadline:
-      body.linkedinHeadline ??
-      existingLead?.linkedin_headline ??
-      "",
-    estimatedValue:
-      body.estimatedValue ??
-      existingLead?.estimated_value ??
-      0,
+      body.linkedinHeadline ?? existingLead?.linkedin_headline ?? "",
+    estimatedValue: body.estimatedValue ?? existingLead?.estimated_value ?? 0,
     dealProbability:
-      body.dealProbability ??
-      existingLead?.deal_probability ??
-      0,
+      body.dealProbability ?? existingLead?.deal_probability ?? 0,
   };
 }
 
@@ -171,11 +113,6 @@ function parseImportRow(row = {}) {
       row.followUpDate ||
       row["Follow Up Date"] ||
       row.follow_up_date ||
-      null,
-    nextFollowUp:
-      row.nextFollowUp ||
-      row["Next Follow Up"] ||
-      row.next_follow_up ||
       null,
     notes: normalizeText(row.notes || row.Notes),
     quoteAmount:
@@ -223,7 +160,6 @@ function parseImportRow(row = {}) {
     status: baseLead.status,
     stage: baseLead.stage,
     follow_up_date: baseLead.followUpDate,
-    next_follow_up: baseLead.nextFollowUp,
     notes: baseLead.notes,
     notes_history: JSON.stringify(
       baseLead.notes
@@ -294,7 +230,6 @@ router.post("/", async (req, res) => {
       status: normalizeText(body.status) || "New",
       stage: normalizeText(body.stage) || "Prospect",
       follow_up_date: body.followUpDate || null,
-      next_follow_up: body.nextFollowUp || null,
       notes: normalizeText(body.notes) || "",
       notes_history: JSON.stringify(
         Array.isArray(body.notesHistory) ? body.notesHistory : []
@@ -446,7 +381,6 @@ router.patch("/:id", async (req, res) => {
       status: "status",
       stage: "stage",
       followUpDate: "follow_up_date",
-      nextFollowUp: "next_follow_up",
       notes: "notes",
       quoteAmount: "quote_amount",
       quoteStatus: "quote_status",
@@ -549,12 +483,7 @@ router.post("/:id/notes", async (req, res) => {
       },
     ];
 
-    const ai = scoreLead(
-      buildLeadScoreInput(
-        { notesHistory: nextHistory },
-        lead
-      )
-    );
+    const ai = scoreLead(buildLeadScoreInput({ notesHistory: nextHistory }, lead));
 
     await db("leads")
       .where({
