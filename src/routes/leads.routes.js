@@ -19,14 +19,21 @@ function safeJsonParse(value, fallback = []) {
   }
 }
 
+function normalizeText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function mapLead(row) {
   return {
     id: row.id,
     businessName: row.business_name,
     contactName: row.contact_name,
-    phone: row.phone,
-    mobile: row.mobile,
-    location: row.location,
+
+    // These do not exist in your current DB schema yet.
+    phone: "",
+    mobile: "",
+    location: "",
+
     source: row.source,
     category: row.category,
     status: row.status,
@@ -58,24 +65,104 @@ function mapLead(row) {
   };
 }
 
-function normalizeText(value) {
-  return typeof value === "string" ? value.trim() : "";
+function buildLeadScoreInput(body = {}, existingLead = null) {
+  return {
+    businessName:
+      body.businessName ??
+      existingLead?.business_name ??
+      "",
+    contactName:
+      body.contactName ??
+      existingLead?.contact_name ??
+      "",
+
+    // Not in DB yet, but safe for scoring input
+    phone: body.phone ?? "",
+    mobile: body.mobile ?? "",
+    location: body.location ?? "",
+
+    source:
+      body.source ??
+      existingLead?.source ??
+      "",
+    category:
+      body.category ??
+      existingLead?.category ??
+      "",
+    status:
+      body.status ??
+      existingLead?.status ??
+      "",
+    stage:
+      body.stage ??
+      existingLead?.stage ??
+      "",
+    followUpDate:
+      body.followUpDate ??
+      existingLead?.follow_up_date ??
+      null,
+    nextFollowUp:
+      body.nextFollowUp ??
+      existingLead?.next_follow_up ??
+      null,
+    notes:
+      body.notes ??
+      existingLead?.notes ??
+      "",
+    notesHistory: Array.isArray(body.notesHistory)
+      ? body.notesHistory
+      : safeJsonParse(existingLead?.notes_history, []),
+    quoteAmount:
+      body.quoteAmount ??
+      existingLead?.quote_amount ??
+      null,
+    quoteStatus:
+      body.quoteStatus ??
+      existingLead?.quote_status ??
+      "",
+    linkedinRole:
+      body.linkedinRole ??
+      existingLead?.linkedin_role ??
+      "",
+    linkedinLocation:
+      body.linkedinLocation ??
+      existingLead?.linkedin_location ??
+      "",
+    linkedinKeywords:
+      body.linkedinKeywords ??
+      existingLead?.linkedin_keywords ??
+      "",
+    linkedinCompany:
+      body.linkedinCompany ??
+      existingLead?.linkedin_company ??
+      "",
+    linkedinProfileUrl:
+      body.linkedinProfileUrl ??
+      existingLead?.linkedin_profile_url ??
+      "",
+    linkedinHeadline:
+      body.linkedinHeadline ??
+      existingLead?.linkedin_headline ??
+      "",
+    estimatedValue:
+      body.estimatedValue ??
+      existingLead?.estimated_value ??
+      0,
+    dealProbability:
+      body.dealProbability ??
+      existingLead?.deal_probability ??
+      0,
+  };
 }
 
 function parseImportRow(row = {}) {
-  const businessName = normalizeText(
-    row.businessName || row["Business Name"] || row.business_name
-  );
-  const contactName = normalizeText(
-    row.contactName || row["Contact Name"] || row.contact_name
-  );
-
   const baseLead = {
-    businessName,
-    contactName,
-    phone: normalizeText(row.phone || row.Phone),
-    mobile: normalizeText(row.mobile || row.Mobile),
-    location: normalizeText(row.location || row.Location),
+    businessName: normalizeText(
+      row.businessName || row["Business Name"] || row.business_name
+    ),
+    contactName: normalizeText(
+      row.contactName || row["Contact Name"] || row.contact_name
+    ),
     source: normalizeText(row.source || row.Source) || "LinkedIn",
     category: normalizeText(row.category || row.Category) || "Small Business",
     status: normalizeText(row.status || row.Status) || "New",
@@ -131,9 +218,6 @@ function parseImportRow(row = {}) {
   return {
     business_name: baseLead.businessName,
     contact_name: baseLead.contactName,
-    phone: baseLead.phone,
-    mobile: baseLead.mobile,
-    location: baseLead.location,
     source: baseLead.source,
     category: baseLead.category,
     status: baseLead.status,
@@ -196,7 +280,7 @@ router.post("/", async (req, res) => {
     }
 
     const body = req.body || {};
-    const ai = scoreLead(body);
+    const ai = scoreLead(buildLeadScoreInput(body));
 
     const lead = {
       id: uuidv4(),
@@ -205,9 +289,6 @@ router.post("/", async (req, res) => {
       user_email: req.user.email || null,
       business_name: normalizeText(body.businessName) || "New Lead",
       contact_name: normalizeText(body.contactName) || "",
-      phone: normalizeText(body.phone) || "",
-      mobile: normalizeText(body.mobile) || "",
-      location: normalizeText(body.location) || "",
       source: normalizeText(body.source) || "LinkedIn",
       category: normalizeText(body.category) || "Small Business",
       status: normalizeText(body.status) || "New",
@@ -360,9 +441,6 @@ router.patch("/:id", async (req, res) => {
     const fieldMap = {
       businessName: "business_name",
       contactName: "contact_name",
-      phone: "phone",
-      mobile: "mobile",
-      location: "location",
       source: "source",
       category: "category",
       status: "status",
@@ -390,41 +468,7 @@ router.patch("/:id", async (req, res) => {
       updates.notes_history = JSON.stringify(req.body.notesHistory);
     }
 
-    const mergedForScoring = {
-      businessName: req.body?.businessName ?? existingLead.business_name ?? "",
-      contactName: req.body?.contactName ?? existingLead.contact_name ?? "",
-      phone: req.body?.phone ?? existingLead.phone ?? "",
-      mobile: req.body?.mobile ?? existingLead.mobile ?? "",
-      location: req.body?.location ?? existingLead.location ?? "",
-      source: req.body?.source ?? existingLead.source ?? "",
-      category: req.body?.category ?? existingLead.category ?? "",
-      status: req.body?.status ?? existingLead.status ?? "",
-      stage: req.body?.stage ?? existingLead.stage ?? "",
-      followUpDate: req.body?.followUpDate ?? existingLead.follow_up_date ?? null,
-      nextFollowUp: req.body?.nextFollowUp ?? existingLead.next_follow_up ?? null,
-      notes: req.body?.notes ?? existingLead.notes ?? "",
-      notesHistory: Array.isArray(req.body?.notesHistory)
-        ? req.body.notesHistory
-        : safeJsonParse(existingLead.notes_history, []),
-      quoteAmount: req.body?.quoteAmount ?? existingLead.quote_amount ?? null,
-      quoteStatus: req.body?.quoteStatus ?? existingLead.quote_status ?? "",
-      linkedinRole: req.body?.linkedinRole ?? existingLead.linkedin_role ?? "",
-      linkedinLocation:
-        req.body?.linkedinLocation ?? existingLead.linkedin_location ?? "",
-      linkedinKeywords:
-        req.body?.linkedinKeywords ?? existingLead.linkedin_keywords ?? "",
-      linkedinCompany:
-        req.body?.linkedinCompany ?? existingLead.linkedin_company ?? "",
-      linkedinProfileUrl:
-        req.body?.linkedinProfileUrl ?? existingLead.linkedin_profile_url ?? "",
-      linkedinHeadline:
-        req.body?.linkedinHeadline ?? existingLead.linkedin_headline ?? "",
-      estimatedValue: req.body?.estimatedValue ?? existingLead.estimated_value ?? 0,
-      dealProbability:
-        req.body?.dealProbability ?? existingLead.deal_probability ?? 0,
-    };
-
-    const ai = scoreLead(mergedForScoring);
+    const ai = scoreLead(buildLeadScoreInput(req.body, existingLead));
 
     updates.ai_score = ai.ai_score;
     updates.ai_priority = ai.ai_priority;
@@ -505,33 +549,12 @@ router.post("/:id/notes", async (req, res) => {
       },
     ];
 
-    const mergedForScoring = {
-      businessName: lead.business_name,
-      contactName: lead.contact_name,
-      phone: lead.phone,
-      mobile: lead.mobile,
-      location: lead.location,
-      source: lead.source,
-      category: lead.category,
-      status: lead.status,
-      stage: lead.stage,
-      followUpDate: lead.follow_up_date,
-      nextFollowUp: lead.next_follow_up,
-      notes: lead.notes,
-      notesHistory: nextHistory,
-      quoteAmount: lead.quote_amount,
-      quoteStatus: lead.quote_status,
-      linkedinRole: lead.linkedin_role,
-      linkedinLocation: lead.linkedin_location,
-      linkedinKeywords: lead.linkedin_keywords,
-      linkedinCompany: lead.linkedin_company,
-      linkedinProfileUrl: lead.linkedin_profile_url,
-      linkedinHeadline: lead.linkedin_headline,
-      estimatedValue: lead.estimated_value,
-      dealProbability: lead.deal_probability,
-    };
-
-    const ai = scoreLead(mergedForScoring);
+    const ai = scoreLead(
+      buildLeadScoreInput(
+        { notesHistory: nextHistory },
+        lead
+      )
+    );
 
     await db("leads")
       .where({
