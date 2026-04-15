@@ -4,28 +4,29 @@ import cors from "cors";
 
 import authRoutes from "./routes/auth.routes.js";
 import leadsRoutes from "./routes/leads.routes.js";
+import jobLeadsRoutes from "./routes/jobLeads.routes.js";
+import jobScanRoutes from "./routes/jobScan.routes.js";
+import jobAutoDetectRoutes from "./routes/jobAutoDetect.routes.js";
+import jobSourceConfigRoutes from "./routes/jobSourceConfig.routes.js";
 
 const app = express();
 
 /* =========================
-   CORS CONFIG (FIXED + EXTENSION SUPPORT)
+   CORS CONFIG
 ========================= */
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "https://wondrous-pothos-1d6004.netlify.app",
-
-  // ✅ Chrome Extension (IMPORTANT)
+  (process.env.FRONTEND_URL || "").trim(),
   "chrome-extension://ipbgijgfpcollnkaekgkgdlbddciglb",
-];
+].filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      // allow requests with no origin (Postman, curl, etc)
       if (!origin) return callback(null, true);
 
-      // ✅ allow chrome extensions dynamically (safer than hardcoding only one)
       if (origin.startsWith("chrome-extension://")) {
         return callback(null, true);
       }
@@ -43,27 +44,19 @@ app.use(
   })
 );
 
-/* =========================
-   MIDDLEWARE
-========================= */
 app.use(express.json());
 
-/* =========================
-   HEALTH CHECK
-========================= */
 app.get("/", (req, res) => {
   res.send("LeadRadar API running 🚀");
 });
 
-/* =========================
-   ROUTES
-========================= */
 app.use("/api/auth", authRoutes);
 app.use("/api/leads", leadsRoutes);
+app.use("/api", jobLeadsRoutes);
+app.use("/api", jobScanRoutes);
+app.use("/api", jobAutoDetectRoutes);
+app.use("/api", jobSourceConfigRoutes);
 
-/* =========================
-   ERROR HANDLER
-========================= */
 app.use((err, req, res, next) => {
   console.error("❌ Server error:", err);
 
@@ -76,9 +69,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-/* =========================
-   START SERVER
-========================= */
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
