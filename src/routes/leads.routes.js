@@ -1,26 +1,21 @@
 import express from "express";
 import { requireAuth } from "../middleware/auth.middleware.js";
-
 import {
-  searchJobLeads,
-  getSavedPortals,
-  createSavedPortal,
-  deleteSavedPortal,
-  deleteAllSavedPortals,
-} from "../controllers/jobLeads.controller.js";
+  getLeads,
+  createLead,
+  updateLead,
+  deleteLead,
+  addLeadNote,
+} from "../controllers/leads.controller.js";
 
 const router = express.Router();
 
-// protect all routes
 router.use(requireAuth);
 
-// SEARCH
-router.post("/job-leads/search", searchJobLeads);
-
-// PORTALS
-router.get("/job-leads/portals", getSavedPortals);
-router.post("/job-leads/portals", createSavedPortal);
-router.delete("/job-leads/portals/:id", deleteSavedPortal);
-router.delete("/job-leads/portals", deleteAllSavedPortals);
+router.get("/", getLeads);
+router.post("/", createLead);
+router.patch("/:id", updateLead);
+router.delete("/:id", deleteLead);
+router.post("/:id/notes", addLeadNote);
 
 export default router;
