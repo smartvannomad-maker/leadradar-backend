@@ -13,9 +13,16 @@ export function requireAuth(req, res, next) {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log("AUTH OK:", decoded);
 
-    req.user = decoded;
+    req.user = {
+      ...decoded,
+      id: decoded.userId,
+      workspaceId: decoded.workspaceId,
+      email: decoded.email,
+    };
+
+    console.log("AUTH OK:", req.user);
+
     return next();
   } catch (error) {
     console.log("AUTH FAIL:", error.name, error.message);

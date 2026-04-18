@@ -33,27 +33,41 @@ router.post("/register", async (req, res, next) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-
     const workspaceId = uuidv4();
 
-    await knex("workspaces").insert({
-      id: workspaceId,
-      name: cleanEmail,
-      plan: "starter",
-      subscription_status: "active",
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
+    const user = await knex.transaction(async (trx) => {
+      await trx("workspaces").insert({
+        id: workspaceId,
+        name: cleanEmail,
+        plan: "starter",
+        subscription_status: "active",
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
 
-    const insertedUsers = await knex("users")
-      .insert({
-        email: cleanEmail,
-        password_hash: passwordHash,
+      const insertedUsers = await trx("users")
+        .insert({
+          email: cleanEmail,
+          password_hash: passwordHash,
+          workspace_id: workspaceId,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .returning("*");
+
+      const newUser = insertedUsers[0];
+
+      await trx("workspace_members").insert({
+        id: uuidv4(),
         workspace_id: workspaceId,
-      })
-      .returning("*");
+        user_id: newUser.id,
+        role: "owner",
+        created_at: new Date(),
+        updated_at: new Date(),
+      });
 
-    const user = insertedUsers[0];
+      return newUser;
+    });
 
     const accessToken = signAccessToken({
       userId: user.id,
