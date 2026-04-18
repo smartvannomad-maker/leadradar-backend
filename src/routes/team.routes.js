@@ -1,12 +1,16 @@
 import express from "express";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db/knex.js";
-import { requireAuth } from "../middleware/auth.middleware.js";
+import {
+  requireAuth,
+  attachWorkspaceAccess,
+  requirePremiumAccess,
+} from "../middleware/auth.middleware.js";
 import { sendWorkspaceInviteEmail } from "../utils/email.js";
 
 const router = express.Router();
 
-router.use(requireAuth);
+router.use(requireAuth, attachWorkspaceAccess, requirePremiumAccess);
 
 async function getWorkspaceRole(userId, workspaceId) {
   const membership = await db("workspace_members")
