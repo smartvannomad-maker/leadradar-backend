@@ -8,6 +8,8 @@ const stripeSecretKey = process.env.STRIPE_SECRET_KEY || "";
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
+const PAYFAST_PASSPHRASE = process.env.PAYFAST_PASSPHRASE || "";
+
 async function activateWorkspace({
   workspaceId,
   planKey,
@@ -27,6 +29,30 @@ async function activateWorkspace({
       provider_subscription_id: providerSubscriptionId,
       updated_at: new Date(),
     });
+}
+
+function getPayfastSignatureString(data, passphrase = "") {
+  const filtered = Object.entries(data)
+    .filter(([key, value]) => key !== "signature" && value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value).trim()).replace(/%20/g, "+")}`)
+    .join("&");
+
+  if (!passphrase) {
+    return filtered;
+  }
+
+  return `${filtered}&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, "+")}`;
+}
+
+async function verifyPayfastITNBasic(payload) {
+  const crypto = await import("node:crypto");
+  const signature = String(payload?.signature || "");
+  if (!signature) return false;
+
+  const signatureString = getPayfastSignatureString(payload, PAYFAST_PASSPHRASE);
+  const generated = crypto.createHash("md5").update(signatureString).digest("hex");
+
+  return generated === signature;
 }
 
 router.post(
@@ -117,11 +143,24 @@ router.post(
   express.urlencoded({ extended: false }),
   async (req, res) => {
     try {
-      const paymentStatus = String(req.body?.payment_status || "").toUpperCase();
-      const workspaceId = String(req.body?.custom_str2 || "").trim();
-      const planKey = String(req.body?.custom_str3 || "").trim().toLowerCase();
-      const pfPaymentId = String(req.body?.pf_payment_id || "").trim();
+      // Respond quickly; Payfast retries failed ITNs.
+      res.status(200).send("OK");
 
+      const payload = { ...req.body };
+      const paymentStatus = String(payload?.payment_status || "").toUpperCase();
+      const workspaceId = String(payload?.custom_str2 || "").trim();
+      const planKey = String(payload?.custom_str3 || "").trim().toLowerCase();
+      const pfPaymentId = String(payload?.pf_payment_id || "").trim();
+
+      const signatureValid = await verifyPayfastITNBasic(payload);
+      if (!signatureValid) {
+        console.error("Payfast ITN invalid signature");
+        return;
+      }
+
+      // MVP:
+      // For production, also validate source IP and amount against your expected order
+      // as Payfast recommends.
       if (paymentStatus === "COMPLETE" && workspaceId && planKey) {
         await activateWorkspace({
           workspaceId,
@@ -131,11 +170,8 @@ router.post(
           providerSubscriptionId: pfPaymentId || null,
         });
       }
-
-      return res.status(200).send("OK");
     } catch (error) {
       console.error("Payfast IPN error:", error);
-      return res.status(500).send("IPN Error");
     }
   }
 );

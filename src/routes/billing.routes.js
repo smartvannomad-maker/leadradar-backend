@@ -10,7 +10,10 @@ const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const FRONTEND_URL =
   (process.env.FRONTEND_URL || "https://leadradarr.netlify.app").replace(/\/+$/, "");
 
-// Replace these with your real Stripe recurring monthly price IDs
+const API_BASE_URL =
+  (process.env.API_BASE_URL ||
+    "https://leadradar-backend-oziv.onrender.com").replace(/\/+$/, "");
+
 const STRIPE_PRICES = {
   starter: {
     EUR: process.env.STRIPE_PRICE_STARTER_EUR || "price_starter_eur",
@@ -20,10 +23,9 @@ const STRIPE_PRICES = {
   },
 };
 
-// Payfast config placeholders - replace with real values
 const PAYFAST_MODE = (process.env.PAYFAST_MODE || "sandbox").toLowerCase();
-const PAYFAST_MERCHANT_ID = process.env.PAYFAST_MERCHANT_ID || "YOUR_ID";
-const PAYFAST_MERCHANT_KEY = process.env.PAYFAST_MERCHANT_KEY || "YOUR_KEY";
+const PAYFAST_MERCHANT_ID = process.env.PAYFAST_MERCHANT_ID || "";
+const PAYFAST_MERCHANT_KEY = process.env.PAYFAST_MERCHANT_KEY || "";
 const PAYFAST_PASSPHRASE = process.env.PAYFAST_PASSPHRASE || "";
 const PAYFAST_BASE_URL =
   PAYFAST_MODE === "live"
@@ -76,7 +78,7 @@ function buildPayfastUrl({ planKey, amount, req }) {
   cancelUrl.searchParams.set("provider", "payfast");
   cancelUrl.searchParams.set("plan", planKey);
 
-  const notifyUrl = `${FRONTEND_URL}`; // placeholder only; replace with backend IPN endpoint when added
+  const notifyUrl = `${API_BASE_URL}/api/billing/webhooks/payfast`;
 
   const params = new URLSearchParams({
     merchant_id: PAYFAST_MERCHANT_ID,
@@ -97,8 +99,8 @@ function buildPayfastUrl({ planKey, amount, req }) {
     subscription_type: "1",
     billing_date: new Date().toISOString().slice(0, 10),
     recurring_amount: String(amount.toFixed(2)),
-    frequency: "3", // monthly
-    cycles: "0", // ongoing
+    frequency: "3",
+    cycles: "0",
   });
 
   if (PAYFAST_PASSPHRASE) {
@@ -127,7 +129,6 @@ router.post("/checkout", requireAuth, async (req, res) => {
       return res.status(400).json({ message: "Unsupported currency" });
     }
 
-    // Stripe for EUR
     if (currency === "EUR") {
       if (!stripe) {
         return res.status(500).json({
@@ -137,11 +138,11 @@ router.post("/checkout", requireAuth, async (req, res) => {
 
       const priceId = STRIPE_PRICES[planKey]?.EUR;
 
-      if (!priceId || priceId.startsWith("price_") === false && !priceId.startsWith("prod_") && priceId === "price_starter_eur") {
-        // keep simple placeholder detection friendly
-      }
-
-      if (!priceId || priceId === "price_starter_eur" || priceId === "price_pro_eur") {
+      if (
+        !priceId ||
+        priceId === "price_starter_eur" ||
+        priceId === "price_pro_eur"
+      ) {
         return res.status(500).json({
           message: "Stripe price IDs are not configured yet",
         });
@@ -150,12 +151,7 @@ router.post("/checkout", requireAuth, async (req, res) => {
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         payment_method_types: ["card"],
-        line_items: [
-          {
-            price: priceId,
-            quantity: 1,
-          },
-        ],
+        line_items: [{ price: priceId, quantity: 1 }],
         success_url: buildStripeSuccessUrl(planKey, currency),
         cancel_url: buildStripeCancelUrl(planKey, currency),
         client_reference_id: req.user.workspaceId,
@@ -184,14 +180,8 @@ router.post("/checkout", requireAuth, async (req, res) => {
       });
     }
 
-    // Payfast for ZAR
     if (currency === "ZAR") {
-      if (
-        !PAYFAST_MERCHANT_ID ||
-        !PAYFAST_MERCHANT_KEY ||
-        PAYFAST_MERCHANT_ID === "YOUR_ID" ||
-        PAYFAST_MERCHANT_KEY === "YOUR_KEY"
-      ) {
+      if (!PAYFAST_MERCHANT_ID || !PAYFAST_MERCHANT_KEY) {
         return res.status(500).json({
           message: "Payfast merchant settings are not configured yet",
         });
