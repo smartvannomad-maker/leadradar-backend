@@ -9,10 +9,11 @@ import teamRoutes from "./routes/team.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import billingRoutes from "./routes/billing.routes.js";
 import billingWebhooksRoutes from "./routes/billing.webhooks.routes.js";
+import aiSearchRoutes from "./routes/aiSearch.routes.js";
 
 const app = express();
 
-const allowedOrigins = [
+const exactAllowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "http://localhost:3002",
@@ -26,6 +27,15 @@ const allowedOrigins = [
   "chrome-extension://pjjmnopacpfieaaoinnmokdilkgngccb",
 ].filter(Boolean);
 
+function isAllowedNetlifyPreview(origin) {
+  if (!origin) return false;
+
+  return (
+    origin.endsWith("--leadradarr.netlify.app") ||
+    origin.endsWith(".netlify.app")
+  );
+}
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -37,7 +47,11 @@ app.use(
         return callback(null, true);
       }
 
-      if (allowedOrigins.includes(cleanOrigin)) {
+      if (exactAllowedOrigins.includes(cleanOrigin)) {
+        return callback(null, true);
+      }
+
+      if (isAllowedNetlifyPreview(cleanOrigin)) {
         return callback(null, true);
       }
 
@@ -64,6 +78,7 @@ app.use("/api/team", teamRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/job-leads", jobLeadsRoutes);
+app.use("/api/ai-search", aiSearchRoutes);
 
 app.use((err, req, res, next) => {
   console.error("❌ Server error:", err);

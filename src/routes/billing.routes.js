@@ -21,6 +21,9 @@ const STRIPE_PRICES = {
   pro: {
     EUR: process.env.STRIPE_PRICE_PRO_EUR || "price_pro_eur",
   },
+  premium: {
+    EUR: process.env.STRIPE_PRICE_PREMIUM_EUR || "price_premium_eur",
+  },
 };
 
 const PAYFAST_MODE = (process.env.PAYFAST_MODE || "sandbox").toLowerCase();
@@ -42,6 +45,11 @@ const PLAN_DETAILS = {
     title: "Pro",
     EUR: 19,
     ZAR: 499,
+  },
+  premium: {
+    title: "Premium",
+    EUR: 49,
+    ZAR: 1299,
   },
 };
 
@@ -98,8 +106,6 @@ function buildPayfastUrl({ planKey, amount, req }) {
     custom_str3: planKey,
   });
 
-  // Sandbox does not support recurring subscriptions properly for testing.
-  // Only add recurring fields in live mode.
   if (PAYFAST_MODE === "live") {
     params.set("subscription_type", "1");
     params.set("billing_date", new Date().toISOString().slice(0, 10));
@@ -146,7 +152,8 @@ router.post("/checkout", requireAuth, async (req, res) => {
       if (
         !priceId ||
         priceId === "price_starter_eur" ||
-        priceId === "price_pro_eur"
+        priceId === "price_pro_eur" ||
+        priceId === "price_premium_eur"
       ) {
         return res.status(500).json({
           message: "Stripe price IDs are not configured yet",

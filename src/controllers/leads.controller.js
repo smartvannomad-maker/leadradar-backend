@@ -35,6 +35,45 @@ function normalizeJsonField(value) {
   return [];
 }
 
+function normalizeLinkedInProfileUrl(value) {
+  if (!value) return "";
+
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  try {
+    const withProtocol = /^https?:\/\//i.test(raw)
+      ? raw
+      : `https://${raw}`;
+
+    const url = new URL(withProtocol);
+
+    url.hash = "";
+    url.search = "";
+
+    let pathname = (url.pathname || "").replace(/\/+$/, "");
+    if (!pathname) pathname = "/";
+
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+
+    return `https://${hostname}${pathname}`.toLowerCase();
+  } catch {
+    return raw
+      .toLowerCase()
+      .split("?")[0]
+      .replace(/\/+$/, "");
+  }
+}
+
+function isUniqueConstraintViolation(error) {
+  if (!error) return false;
+
+  return (
+    error.code === "23505" ||
+    String(error.constraint || "").includes("leads_workspace_id_linkedin_profile_url_unique")
+  );
+}
+
 function normalizeLead(row) {
   if (!row) return null;
 
@@ -94,8 +133,9 @@ function mapLeadInput(body = {}) {
     linkedin_location: body.linkedinLocation || body.linkedin_location || "",
     linkedin_keywords: body.linkedinKeywords || body.linkedin_keywords || "",
     linkedin_company: body.linkedinCompany || body.linkedin_company || "",
-    linkedin_profile_url:
-      body.linkedinProfileUrl || body.linkedin_profile_url || "",
+    linkedin_profile_url: normalizeLinkedInProfileUrl(
+      body.linkedinProfileUrl || body.linkedin_profile_url || ""
+    ),
     linkedin_headline: body.linkedinHeadline || body.linkedin_headline || "",
     ai_score: body.aiScore ?? body.ai_score ?? null,
     ai_priority: body.aiPriority || body.ai_priority || "",
@@ -131,15 +171,42 @@ export async function createLead(req, res, next) {
     const userId = req.user.userId || req.user.id || null;
     const userEmail = req.user.email || null;
 
+    if (!workspaceId) {
+      return res.status(401).json({
+        message: "Session is missing workspace access. Please log in again.",
+        code: "STALE_SESSION",
+      });
+    }
+
+    const workspaceExists = await knex("workspaces")
+      .where({ id: workspaceId })
+      .first();
+
+    if (!workspaceExists) {
+      return res.status(401).json({
+        message: "Workspace not found for this session. Please log in again.",
+        code: "STALE_SESSION",
+      });
+    }
+
     payload = mapLeadInput(req.body);
 
-    console.log("🚀 NEW CREATE LEAD CONTROLLER RUNNING", {
-      workspaceId,
-      userId,
-      userEmail,
-      payloadKeys: Object.keys(payload || {}),
-      payload,
-    });
+    if (payload.linkedin_profile_url) {
+      const existingLead = await knex("leads")
+        .where({
+          workspace_id: workspaceId,
+          linkedin_profile_url: payload.linkedin_profile_url,
+        })
+        .first();
+
+      if (existingLead) {
+        return res.status(409).json({
+          code: "DUPLICATE_LEAD",
+          message: "Lead already exists in this workspace",
+          lead: normalizeLead(existingLead),
+        });
+      }
+    }
 
     const insertData = {
       id: uuidv4(),
@@ -152,8 +219,6 @@ export async function createLead(req, res, next) {
       updated_at: new Date(),
     };
 
-    console.log("🚀 LEAD INSERT DATA", insertData);
-
     const [created] = await knex("leads")
       .insert(insertData)
       .returning("*");
@@ -162,6 +227,13 @@ export async function createLead(req, res, next) {
       lead: normalizeLead(created),
     });
   } catch (error) {
+    if (isUniqueConstraintViolation(error)) {
+      return res.status(409).json({
+        code: "DUPLICATE_LEAD",
+        message: "Lead already exists in this workspace",
+      });
+    }
+
     console.error("createLead error:", error.message || error);
     console.error("createLead payload:", payload);
     next(error);
@@ -174,6 +246,24 @@ export async function updateLead(req, res, next) {
     const { id } = req.params;
 
     const payload = mapLeadInput(req.body);
+
+    if (payload.linkedin_profile_url) {
+      const existingLead = await knex("leads")
+        .where({
+          workspace_id: workspaceId,
+          linkedin_profile_url: payload.linkedin_profile_url,
+        })
+        .whereNot({ id })
+        .first();
+
+      if (existingLead) {
+        return res.status(409).json({
+          code: "DUPLICATE_LEAD",
+          message: "Lead already exists in this workspace",
+          lead: normalizeLead(existingLead),
+        });
+      }
+    }
 
     const [updated] = await knex("leads")
       .where({
@@ -194,6 +284,13 @@ export async function updateLead(req, res, next) {
       lead: normalizeLead(updated),
     });
   } catch (error) {
+    if (isUniqueConstraintViolation(error)) {
+      return res.status(409).json({
+        code: "DUPLICATE_LEAD",
+        message: "Lead already exists in this workspace",
+      });
+    }
+
     next(error);
   }
 }

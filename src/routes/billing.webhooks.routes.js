@@ -27,21 +27,34 @@ async function activateWorkspace({
       billing_provider: billingProvider || null,
       provider_customer_id: providerCustomerId,
       provider_subscription_id: providerSubscriptionId,
+      trial_ends_at: null,
       updated_at: new Date(),
     });
 }
 
 function getPayfastSignatureString(data, passphrase = "") {
   const filtered = Object.entries(data)
-    .filter(([key, value]) => key !== "signature" && value !== undefined && value !== null && value !== "")
-    .map(([key, value]) => `${key}=${encodeURIComponent(String(value).trim()).replace(/%20/g, "+")}`)
+    .filter(
+      ([key, value]) =>
+        key !== "signature" &&
+        value !== undefined &&
+        value !== null &&
+        value !== ""
+    )
+    .map(
+      ([key, value]) =>
+        `${key}=${encodeURIComponent(String(value).trim()).replace(/%20/g, "+")}`
+    )
     .join("&");
 
   if (!passphrase) {
     return filtered;
   }
 
-  return `${filtered}&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, "+")}`;
+  return `${filtered}&passphrase=${encodeURIComponent(passphrase).replace(
+    /%20/g,
+    "+"
+  )}`;
 }
 
 async function verifyPayfastITNBasic(payload) {
@@ -49,8 +62,14 @@ async function verifyPayfastITNBasic(payload) {
   const signature = String(payload?.signature || "");
   if (!signature) return false;
 
-  const signatureString = getPayfastSignatureString(payload, PAYFAST_PASSPHRASE);
-  const generated = crypto.createHash("md5").update(signatureString).digest("hex");
+  const signatureString = getPayfastSignatureString(
+    payload,
+    PAYFAST_PASSPHRASE
+  );
+  const generated = crypto
+    .createHash("md5")
+    .update(signatureString)
+    .digest("hex");
 
   return generated === signature;
 }
@@ -113,6 +132,7 @@ router.post(
               .where({ id: workspaceId })
               .update({
                 subscription_status: "active",
+                trial_ends_at: null,
                 updated_at: new Date(),
               });
           } else if (
@@ -143,7 +163,6 @@ router.post(
   express.urlencoded({ extended: false }),
   async (req, res) => {
     try {
-      // Respond quickly; Payfast retries failed ITNs.
       res.status(200).send("OK");
 
       const payload = { ...req.body };
@@ -158,9 +177,6 @@ router.post(
         return;
       }
 
-      // MVP:
-      // For production, also validate source IP and amount against your expected order
-      // as Payfast recommends.
       if (paymentStatus === "COMPLETE" && workspaceId && planKey) {
         await activateWorkspace({
           workspaceId,

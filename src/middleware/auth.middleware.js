@@ -3,13 +3,30 @@ import knex from "../db/knex.js";
 
 function resolveWorkspaceState(workspace = {}) {
   const subscriptionStatus = workspace.subscription_status || "trialing";
-  const plan = workspace.plan || "starter";
-  const trialEndsAt = workspace.trial_ends_at || null;
+  const plan = workspace.plan || "free";
+
+  const trialEndsAt =
+    workspace.trial_expires_at ||
+    workspace.trial_ends_at ||
+    null;
+
+  const manualAccessOverride = Boolean(workspace.manual_access_override);
+  const manualAccessExpiresAt = workspace.manual_access_expires_at || null;
+  const isActive =
+    typeof workspace.is_active === "boolean" ? workspace.is_active : true;
 
   const now = Date.now();
   const trialEndTime = trialEndsAt ? new Date(trialEndsAt).getTime() : null;
+  const manualAccessEndTime = manualAccessExpiresAt
+    ? new Date(manualAccessExpiresAt).getTime()
+    : null;
 
-  const isPaid = subscriptionStatus === "active" && plan !== "starter";
+  const hasManualAccess =
+    manualAccessOverride &&
+    (!manualAccessEndTime || manualAccessEndTime > now);
+
+  const isPaid = subscriptionStatus === "active" && plan !== "free";
+
   const isExpired =
     subscriptionStatus === "expired" ||
     (subscriptionStatus === "trialing" &&
@@ -26,14 +43,18 @@ function resolveWorkspaceState(workspace = {}) {
     plan,
     subscriptionStatus,
     trialEndsAt,
+    manualAccessOverride,
+    manualAccessExpiresAt,
+    isActive,
     isPaid,
     isTrialing,
     isExpired,
-    hasFullTrialAccess: isTrialing || isPaid,
+    hasManualAccess,
+    hasFullTrialAccess: isTrialing || isPaid || hasManualAccess,
   };
 }
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   try {
     const authHeader = req.headers.authorization || "";
     const token = authHeader.startsWith("Bearer ")
@@ -47,13 +68,52 @@ export function requireAuth(req, res, next) {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    const userId = decoded.userId || decoded.id;
+    if (!userId) {
+      console.log("AUTH FAIL: token missing user id");
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (!decoded.workspaceId) {
+      console.log("AUTH FAIL: token missing workspace id");
+      return res.status(401).json({
+        message: "Invalid session: workspace missing",
+        code: "STALE_SESSION",
+      });
+    }
+
+    const dbUser = await knex("users")
+      .select(
+        "id",
+        "email",
+        "workspace_id",
+        "role",
+        "full_name",
+        "account_status",
+        "created_at",
+        "updated_at"
+      )
+      .where({ id: userId })
+      .first();
+
+    if (!dbUser) {
+      console.log("AUTH FAIL: user not found for token");
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    if (dbUser.account_status === "suspended") {
+      console.log("AUTH FAIL: suspended user", dbUser.email);
+      return res.status(403).json({ message: "Account suspended" });
+    }
+
     req.user = {
-      ...decoded,
-      id: decoded.userId,
-      userId: decoded.userId,
+      id: dbUser.id,
+      userId: dbUser.id,
+      email: dbUser.email,
       workspaceId: decoded.workspaceId,
-      email: decoded.email,
-      role: decoded.role || "user",
+      role: dbUser.role || "user",
+      fullName: dbUser.full_name || "",
+      accountStatus: dbUser.account_status || "active",
     };
 
     console.log("AUTH OK:", req.user);
@@ -92,24 +152,6 @@ export async function attachWorkspaceAccess(req, res, next) {
     }
 
     const resolved = resolveWorkspaceState(workspace);
-
-    if (
-      workspace.subscription_status !== "expired" &&
-      resolved.isExpired
-    ) {
-      await knex("workspaces")
-        .where({ id: workspace.id })
-        .update({
-          subscription_status: "expired",
-          updated_at: new Date(),
-        });
-
-      resolved.subscription_status = "expired";
-      resolved.subscriptionStatus = "expired";
-      resolved.isExpired = true;
-      resolved.isTrialing = false;
-      resolved.hasFullTrialAccess = false;
-    }
 
     req.workspaceAccess = resolved;
     return next();
