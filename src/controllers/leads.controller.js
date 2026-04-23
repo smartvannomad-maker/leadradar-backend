@@ -1,5 +1,8 @@
 import knex from "../db/knex.js";
 import { v4 as uuidv4 } from "uuid";
+import { scoreLead } from "../utils/leadScoring.js";
+
+console.log("LEAD CONTROLLER VERSION: SCORE_DEBUG_2026_04_23");
 
 function normalizeNotesHistory(value) {
   if (Array.isArray(value)) return value;
@@ -42,10 +45,7 @@ function normalizeLinkedInProfileUrl(value) {
   if (!raw) return "";
 
   try {
-    const withProtocol = /^https?:\/\//i.test(raw)
-      ? raw
-      : `https://${raw}`;
-
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     const url = new URL(withProtocol);
 
     url.hash = "";
@@ -58,10 +58,7 @@ function normalizeLinkedInProfileUrl(value) {
 
     return `https://${hostname}${pathname}`.toLowerCase();
   } catch {
-    return raw
-      .toLowerCase()
-      .split("?")[0]
-      .replace(/\/+$/, "");
+    return raw.toLowerCase().split("?")[0].replace(/\/+$/, "");
   }
 }
 
@@ -99,11 +96,11 @@ function normalizeLead(row) {
     linkedinCompany: row.linkedin_company || "",
     linkedinProfileUrl: row.linkedin_profile_url || "",
     linkedinHeadline: row.linkedin_headline || "",
-    aiScore: row.ai_score ?? null,
-    aiPriority: row.ai_priority || "",
+    aiScore: row.ai_score ?? 0,
+    aiPriority: row.ai_priority || "cold",
     aiReasons: normalizeJsonField(row.ai_reasons),
-    dealProbability: row.deal_probability ?? null,
-    followUpUrgency: row.follow_up_urgency || "",
+    dealProbability: row.deal_probability ?? 0,
+    followUpUrgency: row.follow_up_urgency || "low",
     nextBestAction: row.next_best_action || "",
     workspaceId: row.workspace_id || "",
     createdBy: row.created_by || "",
@@ -116,12 +113,11 @@ function normalizeLead(row) {
 
 function mapLeadInput(body = {}) {
   const notesHistoryValue = body.notesHistory ?? body.notes_history;
-  const aiReasonsValue = body.aiReasons ?? body.ai_reasons;
 
   return {
     business_name: body.businessName || body.business_name || "",
     contact_name: body.contactName || body.contact_name || "",
-    mobile: body.mobile || "",
+    mobile: body.mobile || body.phone || "",
     category: body.category || "",
     status: body.status || "new",
     stage: body.stage || "new",
@@ -139,12 +135,6 @@ function mapLeadInput(body = {}) {
       body.linkedinProfileUrl || body.linkedin_profile_url || ""
     ),
     linkedin_headline: body.linkedinHeadline || body.linkedin_headline || "",
-    ai_score: body.aiScore ?? body.ai_score ?? null,
-    ai_priority: body.aiPriority || body.ai_priority || "",
-    ai_reasons: normalizeJsonField(aiReasonsValue),
-    deal_probability: body.dealProbability ?? body.deal_probability ?? null,
-    follow_up_urgency: body.followUpUrgency || body.follow_up_urgency || "",
-    next_best_action: body.nextBestAction || body.next_best_action || "",
   };
 }
 
@@ -234,34 +224,28 @@ function mapLeadPatch(body = {}) {
       body.linkedinHeadline ?? body.linkedin_headline ?? "";
   }
 
-  if ("aiScore" in body || "ai_score" in body) {
-    patch.ai_score = body.aiScore ?? body.ai_score ?? null;
-  }
-
-  if ("aiPriority" in body || "ai_priority" in body) {
-    patch.ai_priority = body.aiPriority ?? body.ai_priority ?? "";
-  }
-
-  if ("aiReasons" in body || "ai_reasons" in body) {
-    patch.ai_reasons = normalizeJsonField(body.aiReasons ?? body.ai_reasons);
-  }
-
-  if ("dealProbability" in body || "deal_probability" in body) {
-    patch.deal_probability =
-      body.dealProbability ?? body.deal_probability ?? null;
-  }
-
-  if ("followUpUrgency" in body || "follow_up_urgency" in body) {
-    patch.follow_up_urgency =
-      body.followUpUrgency ?? body.follow_up_urgency ?? "";
-  }
-
-  if ("nextBestAction" in body || "next_best_action" in body) {
-    patch.next_best_action =
-      body.nextBestAction ?? body.next_best_action ?? "";
-  }
-
   return patch;
+}
+
+function buildScoreInputFromDb(row = {}) {
+  return {
+    businessName: row.business_name || "",
+    contactName: row.contact_name || "",
+    mobile: row.mobile || "",
+    category: row.category || "",
+    status: row.status || "",
+    stage: row.stage || "",
+    followUpDate: row.follow_up_date || "",
+    notes: row.notes || "",
+    quoteAmount: row.quote_amount ?? null,
+    quoteStatus: row.quote_status || "",
+    linkedinRole: row.linkedin_role || "",
+    linkedinLocation: row.linkedin_location || "",
+    linkedinKeywords: row.linkedin_keywords || "",
+    linkedinCompany: row.linkedin_company || "",
+    linkedinProfileUrl: row.linkedin_profile_url || "",
+    linkedinHeadline: row.linkedin_headline || "",
+  };
 }
 
 export async function getLeads(req, res, next) {
@@ -325,9 +309,35 @@ export async function createLead(req, res, next) {
       }
     }
 
+    const ai = scoreLead({
+      businessName: payload.business_name,
+      contactName: payload.contact_name,
+      mobile: payload.mobile,
+      category: payload.category,
+      status: payload.status,
+      stage: payload.stage,
+      followUpDate: payload.follow_up_date,
+      notes: payload.notes,
+      quoteAmount: payload.quote_amount,
+      quoteStatus: payload.quote_status,
+      linkedinRole: payload.linkedin_role,
+      linkedinLocation: payload.linkedin_location,
+      linkedinKeywords: payload.linkedin_keywords,
+      linkedinCompany: payload.linkedin_company,
+      linkedinProfileUrl: payload.linkedin_profile_url,
+      linkedinHeadline: payload.linkedin_headline,
+    });
+
     const insertData = {
       id: uuidv4(),
       ...payload,
+      ai_score: ai.ai_score,
+      ai_priority: ai.ai_priority,
+      ai_reasons: JSON.stringify(ai.ai_reasons),
+      deal_probability: ai.deal_probability,
+      estimated_value: ai.estimated_value,
+      next_best_action: ai.next_best_action,
+      follow_up_urgency: ai.follow_up_urgency,
       workspace_id: workspaceId,
       created_by: userId,
       user_id: userId,
@@ -349,8 +359,6 @@ export async function createLead(req, res, next) {
       });
     }
 
-    console.error("createLead error:", error.message || error);
-    console.error("createLead payload:", payload);
     next(error);
   }
 }
@@ -360,17 +368,17 @@ export async function updateLead(req, res, next) {
     const workspaceId = req.user.workspaceId;
     const { id } = req.params;
 
+    const existing = await knex("leads")
+      .where({ id, workspace_id: workspaceId })
+      .first();
+
+    if (!existing) {
+      return res.status(404).json({ message: "Lead not found." });
+    }
+
     const payload = mapLeadPatch(req.body);
 
     if (!Object.keys(payload).length) {
-      const existing = await knex("leads")
-        .where({ id, workspace_id: workspaceId })
-        .first();
-
-      if (!existing) {
-        return res.status(404).json({ message: "Lead not found." });
-      }
-
       return res.json({
         lead: normalizeLead(existing),
       });
@@ -394,20 +402,27 @@ export async function updateLead(req, res, next) {
       }
     }
 
+    const mergedDbShape = {
+      ...existing,
+      ...payload,
+    };
+
+    const ai = scoreLead(buildScoreInputFromDb(mergedDbShape));
+
     const [updated] = await knex("leads")
-      .where({
-        id,
-        workspace_id: workspaceId,
-      })
+      .where({ id, workspace_id: workspaceId })
       .update({
         ...payload,
+        ai_score: ai.ai_score,
+        ai_priority: ai.ai_priority,
+        ai_reasons: JSON.stringify(ai.ai_reasons),
+        deal_probability: ai.deal_probability,
+        estimated_value: ai.estimated_value,
+        next_best_action: ai.next_best_action,
+        follow_up_urgency: ai.follow_up_urgency,
         updated_at: new Date(),
       })
       .returning("*");
-
-    if (!updated) {
-      return res.status(404).json({ message: "Lead not found." });
-    }
 
     return res.json({
       lead: normalizeLead(updated),
@@ -477,6 +492,14 @@ export async function addLeadNote(req, res, next) {
       },
     ];
 
+    const mergedDbShape = {
+      ...existing,
+      notes: noteText,
+      notes_history: nextHistory,
+    };
+
+    const ai = scoreLead(buildScoreInputFromDb(mergedDbShape));
+
     const [updated] = await knex("leads")
       .where({
         id,
@@ -485,6 +508,13 @@ export async function addLeadNote(req, res, next) {
       .update({
         notes: noteText,
         notes_history: nextHistory,
+        ai_score: ai.ai_score,
+        ai_priority: ai.ai_priority,
+        ai_reasons: JSON.stringify(ai.ai_reasons),
+        deal_probability: ai.deal_probability,
+        estimated_value: ai.estimated_value,
+        next_best_action: ai.next_best_action,
+        follow_up_urgency: ai.follow_up_urgency,
         updated_at: new Date(),
       })
       .returning("*");

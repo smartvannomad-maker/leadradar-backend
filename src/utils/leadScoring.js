@@ -19,13 +19,15 @@ function buildReasons(lead = {}) {
     `${lead.linkedinRole || ""} ${lead.linkedinHeadline || ""} ${lead.linkedinKeywords || ""}`.toLowerCase();
   const location = normalizeLower(lead.linkedinLocation);
   const notes = normalizeLower(lead.notes);
+  const stage = normalizeLower(lead.stage);
+  const status = normalizeLower(lead.status);
+  const quoteStatus = normalizeLower(lead.quoteStatus);
 
   if (lead.businessName) reasons.push("Business identified");
   if (lead.contactName) reasons.push("Contact available");
   if (lead.linkedinRole) reasons.push("LinkedIn role captured");
   if (lead.linkedinHeadline) reasons.push("Headline insight available");
   if (lead.linkedinProfileUrl) reasons.push("LinkedIn profile linked");
-  if (lead.mobile) reasons.push("Direct contact number available");
 
   if (
     ["ceo", "founder", "owner", "director", "head", "manager"].some((k) =>
@@ -43,25 +45,26 @@ function buildReasons(lead = {}) {
     reasons.push("Business growth intent");
   }
 
-  if (lead.stage === "Qualified") {
-    reasons.push("Qualified pipeline stage");
-  }
+  if (stage === "cold") reasons.push("Cold opportunity stage");
+  if (stage === "warm") reasons.push("Warm opportunity stage");
+  if (stage === "hot") reasons.push("Hot opportunity stage");
+  if (stage === "won") reasons.push("Won opportunity");
+  if (stage === "lost") reasons.push("Lost opportunity");
 
-  if (lead.stage === "Proposal") {
-    reasons.push("Proposal stage opportunity");
-  }
+  if (status === "cold") reasons.push("Cold status signal");
+  if (status === "warm") reasons.push("Warm status signal");
+  if (status === "hot") reasons.push("Hot status signal");
 
-  if (lead.stage === "Closed") {
-    reasons.push("Closed stage momentum");
-  }
+  if (status === "contacted") reasons.push("Initial outreach completed");
+  if (status === "follow-up") reasons.push("Follow-up in progress");
+  if (status === "qualified") reasons.push("Lead qualified");
+  if (status === "proposal sent") reasons.push("Proposal already sent");
+  if (status === "negotiation") reasons.push("Negotiation underway");
+  if (status === "closed won") reasons.push("Deal closed won");
+  if (status === "closed lost") reasons.push("Deal closed lost");
 
-  if (lead.quoteStatus === "Sent") {
-    reasons.push("Quote already sent");
-  }
-
-  if (lead.quoteStatus === "Accepted") {
-    reasons.push("Quote accepted");
-  }
+  if (quoteStatus === "sent") reasons.push("Quote already sent");
+  if (quoteStatus === "accepted") reasons.push("Quote accepted");
 
   if (
     location.includes("south africa") ||
@@ -74,7 +77,9 @@ function buildReasons(lead = {}) {
   if (
     notes.includes("interested") ||
     notes.includes("follow up") ||
-    notes.includes("proposal")
+    notes.includes("proposal") ||
+    notes.includes("quote") ||
+    notes.includes("meeting")
   ) {
     reasons.push("Positive engagement notes");
   }
@@ -82,7 +87,8 @@ function buildReasons(lead = {}) {
   if (
     notes.includes("not interested") ||
     notes.includes("unresponsive") ||
-    notes.includes("dead")
+    notes.includes("dead") ||
+    notes.includes("no response")
   ) {
     reasons.push("Negative engagement notes");
   }
@@ -98,20 +104,25 @@ function calculateAiScore(lead = {}) {
   const location = normalizeLower(lead.linkedinLocation);
   const notes = normalizeLower(lead.notes);
   const quoteAmount = toNumber(lead.quoteAmount);
+  const stage = normalizeLower(lead.stage);
+  const status = normalizeLower(lead.status);
+  const quoteStatus = normalizeLower(lead.quoteStatus);
 
-  if (lead.businessName) score += 10;
-  if (lead.contactName) score += 8;
-  if (lead.linkedinRole) score += 10;
-  if (lead.linkedinHeadline) score += 8;
-  if (lead.linkedinProfileUrl) score += 6;
-  if (lead.mobile) score += 5;
+  // Profile quality now has LOWER weight
+  if (lead.businessName) score += 5;
+  if (lead.contactName) score += 4;
+  if (lead.linkedinRole) score += 5;
+  if (lead.linkedinHeadline) score += 4;
+  if (lead.linkedinProfileUrl) score += 3;
+  if (lead.mobile) score += 3;
 
+  // Decision-maker / intent still matters, but less than stage
   if (
     ["ceo", "founder", "owner", "director", "head", "manager"].some((k) =>
       text.includes(k)
     )
   ) {
-    score += 20;
+    score += 10;
   }
 
   if (
@@ -119,35 +130,53 @@ function calculateAiScore(lead = {}) {
       (k) => text.includes(k)
     )
   ) {
-    score += 12;
+    score += 6;
   }
 
-  if (lead.stage === "Qualified") score += 10;
-  if (lead.stage === "Proposal") score += 18;
-  if (lead.stage === "Closed") score += 25;
+  // Stage is now the MAIN driver
+  if (stage === "cold") score -= 40;
+  if (stage === "warm") score += 0;
+  if (stage === "hot") score += 28;
+  if (stage === "won") score = 100;
+  if (stage === "lost") score = 0;
 
-  if (lead.quoteStatus === "Sent") score += 15;
-  if (lead.quoteStatus === "Accepted") score += 25;
+  // Backward compatibility for old status model
+  if (status === "cold") score -= 25;
+  if (status === "warm") score += 0;
+  if (status === "hot") score += 18;
 
-  if (quoteAmount >= 10000) score += 8;
-  if (quoteAmount >= 50000) score += 6;
+  // New status model fine-tunes strongly
+  if (status === "new") score += 0;
+  if (status === "contacted") score += 6;
+  if (status === "follow-up") score += 10;
+  if (status === "qualified") score += 18;
+  if (status === "proposal sent") score += 28;
+  if (status === "negotiation") score += 34;
+  if (status === "closed won") score = 100;
+  if (status === "closed lost") score = 0;
 
+  // Commercial intent
+  if (quoteStatus === "sent") score += 12;
+  if (quoteStatus === "accepted") score += 22;
+
+  if (quoteAmount >= 10000) score += 4;
+  if (quoteAmount >= 50000) score += 4;
+
+  // Smaller contextual boosts
   if (
     location.includes("south africa") ||
     location.includes("cape town") ||
     location.includes("johannesburg")
   ) {
-    score += 5;
+    score += 2;
   }
-
-  if (lead.status === "Hot") score += 15;
-  if (lead.status === "Warm") score += 8;
-  if (lead.status === "Cold") score -= 10;
 
   if (
     notes.includes("interested") ||
     notes.includes("follow up") ||
-    notes.includes("proposal")
+    notes.includes("proposal") ||
+    notes.includes("quote") ||
+    notes.includes("meeting")
   ) {
     score += 8;
   }
@@ -155,27 +184,45 @@ function calculateAiScore(lead = {}) {
   if (
     notes.includes("not interested") ||
     notes.includes("unresponsive") ||
-    notes.includes("dead")
+    notes.includes("dead") ||
+    notes.includes("no response")
   ) {
-    score -= 12;
+    score -= 18;
   }
 
   return Math.max(0, Math.min(100, score));
 }
 
 function calculateDealProbability(lead = {}, aiScore = 0) {
-  let probability = Math.round(aiScore * 0.75);
+  let probability = Math.round(aiScore * 0.65);
 
-  if (lead.stage === "New Lead") probability += 5;
-  if (lead.stage === "Contacted") probability += 10;
-  if (lead.stage === "Qualified") probability += 18;
-  if (lead.stage === "Proposal") probability += 28;
-  if (lead.stage === "Closed") probability += 40;
+  const stage = normalizeLower(lead.stage);
+  const status = normalizeLower(lead.status);
+  const quoteStatus = normalizeLower(lead.quoteStatus);
 
-  if (lead.quoteStatus === "Sent") probability += 10;
-  if (lead.quoteStatus === "Accepted") probability += 25;
+  // Stage drives probability heavily
+  if (stage === "cold") probability -= 35;
+  if (stage === "warm") probability += 0;
+  if (stage === "hot") probability += 25;
+  if (stage === "won") probability = 100;
+  if (stage === "lost") probability = 0;
 
-  if (lead.status === "Cold") probability -= 12;
+  // Old status compatibility
+  if (status === "cold") probability -= 20;
+  if (status === "warm") probability += 0;
+  if (status === "hot") probability += 15;
+
+  // New status model
+  if (status === "contacted") probability += 5;
+  if (status === "follow-up") probability += 8;
+  if (status === "qualified") probability += 14;
+  if (status === "proposal sent") probability += 24;
+  if (status === "negotiation") probability += 30;
+  if (status === "closed won") probability = 100;
+  if (status === "closed lost") probability = 0;
+
+  if (quoteStatus === "sent") probability += 10;
+  if (quoteStatus === "accepted") probability += 20;
 
   return Math.max(0, Math.min(100, probability));
 }
@@ -189,35 +236,52 @@ function calculateEstimatedValue(lead = {}, dealProbability = 0) {
 }
 
 function getNextBestAction(lead = {}, aiScore = 0, dealProbability = 0) {
-  if (lead.stage === "New Lead") {
+  const stage = normalizeLower(lead.stage);
+  const status = normalizeLower(lead.status);
+  const quoteAmount = toNumber(lead.quoteAmount);
+  const quoteStatus = normalizeLower(lead.quoteStatus);
+
+  if (stage === "lost" || status === "closed lost") {
+    return "Archive or move to long-term nurture sequence";
+  }
+
+  if (stage === "won" || status === "closed won") {
+    return "Onboard client and identify upsell opportunities";
+  }
+
+  if (stage === "cold" || status === "cold" || status === "new") {
     return "Send first outreach and qualify decision-maker";
   }
 
-  if (lead.stage === "Contacted" && dealProbability < 40) {
+  if (status === "contacted" && dealProbability < 40) {
     return "Follow up with a short value-led message";
   }
 
-  if (lead.stage === "Qualified" && !lead.quoteAmount) {
+  if (status === "follow-up") {
+    return "Re-engage and book a discovery conversation";
+  }
+
+  if (status === "qualified" && !quoteAmount) {
     return "Prepare scoped quote and confirm client needs";
   }
 
   if (
-    lead.stage === "Qualified" &&
-    lead.quoteAmount &&
-    lead.quoteStatus !== "Sent"
+    (status === "qualified" || status === "proposal sent") &&
+    quoteAmount &&
+    quoteStatus !== "sent"
   ) {
-    return "Send quote and book review call";
+    return "Send quote and book a review call";
   }
 
-  if (lead.stage === "Proposal" && dealProbability >= 60) {
+  if (status === "proposal sent" && dealProbability >= 60) {
     return "Push for close with deadline-driven follow-up";
   }
 
-  if (lead.stage === "Proposal" && dealProbability < 60) {
-    return "Handle objections and refine proposal";
+  if (status === "negotiation" && dealProbability >= 60) {
+    return "Handle objections and move toward close";
   }
 
-  if (lead.status === "Cold" || aiScore < 35) {
+  if (aiScore < 30) {
     return "Re-engage later or move to nurture sequence";
   }
 
@@ -226,6 +290,8 @@ function getNextBestAction(lead = {}, aiScore = 0, dealProbability = 0) {
 
 function getFollowUpUrgency(lead = {}, dealProbability = 0) {
   const followUpDate = normalizeText(lead.followUpDate);
+  const stage = normalizeLower(lead.stage);
+  const status = normalizeLower(lead.status);
 
   if (followUpDate) {
     const today = new Date();
@@ -243,11 +309,24 @@ function getFollowUpUrgency(lead = {}, dealProbability = 0) {
     }
   }
 
-  if (lead.stage === "Proposal" || dealProbability >= 70) {
+  if (
+    stage === "hot" ||
+    status === "hot" ||
+    status === "proposal sent" ||
+    status === "negotiation" ||
+    dealProbability >= 70
+  ) {
     return "high";
   }
 
-  if (lead.stage === "Qualified" || dealProbability >= 45) {
+  if (
+    stage === "warm" ||
+    status === "warm" ||
+    status === "contacted" ||
+    status === "follow-up" ||
+    status === "qualified" ||
+    dealProbability >= 40
+  ) {
     return "medium";
   }
 
