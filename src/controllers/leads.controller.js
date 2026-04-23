@@ -70,7 +70,9 @@ function isUniqueConstraintViolation(error) {
 
   return (
     error.code === "23505" ||
-    String(error.constraint || "").includes("leads_workspace_id_linkedin_profile_url_unique")
+    String(error.constraint || "").includes(
+      "leads_workspace_id_linkedin_profile_url_unique"
+    )
   );
 }
 
@@ -141,10 +143,125 @@ function mapLeadInput(body = {}) {
     ai_priority: body.aiPriority || body.ai_priority || "",
     ai_reasons: normalizeJsonField(aiReasonsValue),
     deal_probability: body.dealProbability ?? body.deal_probability ?? null,
-    follow_up_urgency:
-      body.followUpUrgency || body.follow_up_urgency || "",
+    follow_up_urgency: body.followUpUrgency || body.follow_up_urgency || "",
     next_best_action: body.nextBestAction || body.next_best_action || "",
   };
+}
+
+function mapLeadPatch(body = {}) {
+  const patch = {};
+
+  if ("businessName" in body || "business_name" in body) {
+    patch.business_name = body.businessName ?? body.business_name ?? "";
+  }
+
+  if ("contactName" in body || "contact_name" in body) {
+    patch.contact_name = body.contactName ?? body.contact_name ?? "";
+  }
+
+  if ("mobile" in body) {
+    patch.mobile = body.mobile ?? "";
+  }
+
+  if ("phone" in body && !("mobile" in body)) {
+    patch.mobile = body.phone ?? "";
+  }
+
+  if ("category" in body) {
+    patch.category = body.category ?? "";
+  }
+
+  if ("status" in body) {
+    patch.status = body.status ?? "new";
+  }
+
+  if ("stage" in body) {
+    patch.stage = body.stage ?? "new";
+  }
+
+  if ("followUpDate" in body || "follow_up_date" in body) {
+    patch.follow_up_date = body.followUpDate ?? body.follow_up_date ?? null;
+  }
+
+  if ("notes" in body) {
+    patch.notes = body.notes ?? "";
+  }
+
+  if ("notesHistory" in body || "notes_history" in body) {
+    patch.notes_history = normalizeNotesHistory(
+      body.notesHistory ?? body.notes_history
+    );
+  }
+
+  if ("quoteAmount" in body || "quote_amount" in body) {
+    patch.quote_amount = body.quoteAmount ?? body.quote_amount ?? null;
+  }
+
+  if ("quoteStatus" in body || "quote_status" in body) {
+    patch.quote_status = body.quoteStatus ?? body.quote_status ?? "not_sent";
+  }
+
+  if ("estimatedValue" in body || "estimated_value" in body) {
+    patch.estimated_value = body.estimatedValue ?? body.estimated_value ?? null;
+  }
+
+  if ("linkedinRole" in body || "linkedin_role" in body) {
+    patch.linkedin_role = body.linkedinRole ?? body.linkedin_role ?? "";
+  }
+
+  if ("linkedinLocation" in body || "linkedin_location" in body) {
+    patch.linkedin_location =
+      body.linkedinLocation ?? body.linkedin_location ?? "";
+  }
+
+  if ("linkedinKeywords" in body || "linkedin_keywords" in body) {
+    patch.linkedin_keywords =
+      body.linkedinKeywords ?? body.linkedin_keywords ?? "";
+  }
+
+  if ("linkedinCompany" in body || "linkedin_company" in body) {
+    patch.linkedin_company = body.linkedinCompany ?? body.linkedin_company ?? "";
+  }
+
+  if ("linkedinProfileUrl" in body || "linkedin_profile_url" in body) {
+    patch.linkedin_profile_url = normalizeLinkedInProfileUrl(
+      body.linkedinProfileUrl ?? body.linkedin_profile_url ?? ""
+    );
+  }
+
+  if ("linkedinHeadline" in body || "linkedin_headline" in body) {
+    patch.linkedin_headline =
+      body.linkedinHeadline ?? body.linkedin_headline ?? "";
+  }
+
+  if ("aiScore" in body || "ai_score" in body) {
+    patch.ai_score = body.aiScore ?? body.ai_score ?? null;
+  }
+
+  if ("aiPriority" in body || "ai_priority" in body) {
+    patch.ai_priority = body.aiPriority ?? body.ai_priority ?? "";
+  }
+
+  if ("aiReasons" in body || "ai_reasons" in body) {
+    patch.ai_reasons = normalizeJsonField(body.aiReasons ?? body.ai_reasons);
+  }
+
+  if ("dealProbability" in body || "deal_probability" in body) {
+    patch.deal_probability =
+      body.dealProbability ?? body.deal_probability ?? null;
+  }
+
+  if ("followUpUrgency" in body || "follow_up_urgency" in body) {
+    patch.follow_up_urgency =
+      body.followUpUrgency ?? body.follow_up_urgency ?? "";
+  }
+
+  if ("nextBestAction" in body || "next_best_action" in body) {
+    patch.next_best_action =
+      body.nextBestAction ?? body.next_best_action ?? "";
+  }
+
+  return patch;
 }
 
 export async function getLeads(req, res, next) {
@@ -219,9 +336,7 @@ export async function createLead(req, res, next) {
       updated_at: new Date(),
     };
 
-    const [created] = await knex("leads")
-      .insert(insertData)
-      .returning("*");
+    const [created] = await knex("leads").insert(insertData).returning("*");
 
     return res.status(201).json({
       lead: normalizeLead(created),
@@ -245,7 +360,21 @@ export async function updateLead(req, res, next) {
     const workspaceId = req.user.workspaceId;
     const { id } = req.params;
 
-    const payload = mapLeadInput(req.body);
+    const payload = mapLeadPatch(req.body);
+
+    if (!Object.keys(payload).length) {
+      const existing = await knex("leads")
+        .where({ id, workspace_id: workspaceId })
+        .first();
+
+      if (!existing) {
+        return res.status(404).json({ message: "Lead not found." });
+      }
+
+      return res.json({
+        lead: normalizeLead(existing),
+      });
+    }
 
     if (payload.linkedin_profile_url) {
       const existingLead = await knex("leads")
